@@ -1,5 +1,6 @@
 import type { ChangeEvent, KeyboardEvent, ReactElement } from 'react';
 
+import { getI18n } from '../../i18n';
 import { IS_MAC } from '../../platform';
 import { useAppState, useDispatch } from '../../state/store';
 
@@ -8,6 +9,7 @@ const SEARCH_SHORTCUT = IS_MAC ? 'Cmd+F' : 'Ctrl+F';
 export function SearchBox(): ReactElement {
   const state = useAppState();
   const dispatch = useDispatch();
+  const i18n = getI18n(state.settings?.language);
 
   const handleSearchChange = (e: ChangeEvent<HTMLInputElement>) => {
     dispatch({ type: 'SET_SEARCH_QUERY', query: e.target.value });
@@ -30,7 +32,7 @@ export function SearchBox(): ReactElement {
       <input
         id="search-input"
         className="menu-search-input"
-        placeholder={`Search (${SEARCH_SHORTCUT})`}
+        placeholder={`${i18n.search.placeholder} (${SEARCH_SHORTCUT})`}
         value={state.ui.searchQuery}
         onChange={handleSearchChange}
         onKeyDown={handleSearchKeyDown}

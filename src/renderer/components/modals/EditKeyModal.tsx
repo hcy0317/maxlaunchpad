@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
+import { DEFAULT_FOLDER_ICON_URL } from '../../../shared/constants';
 import type { InstalledApp, KeyConfig } from '../../../shared/types';
+import { getBasename, getParentDirectory } from '../../../shared/utils';
+import { getI18n } from '../../i18n';
 import { IS_WINDOWS } from '../../platform';
-import { useDispatch } from '../../state/store';
+import { useAppState, useDispatch } from '../../state/store';
 import { Modal } from '../common/Modal';
 
 interface EditKeyModalProps {
@@ -10,7 +13,10 @@ interface EditKeyModalProps {
 }
 
 export function EditKeyModal({ keyConfig }: EditKeyModalProps) {
+  const state = useAppState();
   const dispatch = useDispatch();
+  const i18n = getI18n(state.settings?.language);
+  const text = i18n.editKey;
 
   const [label, setLabel] = useState(keyConfig.label);
   const [filePath, setFilePath] = useState(keyConfig.filePath);
@@ -77,10 +83,55 @@ export function EditKeyModal({ keyConfig }: EditKeyModalProps) {
   const handleSelectApp = (app: InstalledApp) => {
     setLabel(app.label);
     setFilePath(app.filePath);
+    setWorkingDirectory(getParentDirectory(app.filePath));
     setDescription(app.label);
+    setIconPath((current) => (current === DEFAULT_FOLDER_ICON_URL ? '' : current));
     setAppSearch('');
     setShowAppDropdown(false);
     setSelectedIndex(-1);
+  };
+
+  const applyPathSelection = async (selectedPath: string, kind: 'file' | 'folder' = 'file') => {
+    if (IS_WINDOWS && selectedPath.toLowerCase().endsWith('.lnk')) {
+      const shortcutInfo = await window.electronAPI.parseShortcut(selectedPath);
+      if (shortcutInfo?.filePath) {
+        setLabel(getBasename(shortcutInfo.filePath));
+        setFilePath(shortcutInfo.filePath);
+        setArgs(shortcutInfo.arguments ?? '');
+        setWorkingDirectory(
+          shortcutInfo.workingDirectory || getParentDirectory(shortcutInfo.filePath),
+        );
+        setDescription(shortcutInfo.description ?? selectedPath);
+        setIconPath((current) => (current === DEFAULT_FOLDER_ICON_URL ? '' : current));
+        return;
+      }
+    }
+
+    setLabel(getBasename(selectedPath));
+    setFilePath(selectedPath);
+    setWorkingDirectory(kind === 'folder' ? selectedPath : getParentDirectory(selectedPath));
+    setDescription(selectedPath);
+    setIconPath((current) =>
+      kind === 'folder'
+        ? DEFAULT_FOLDER_ICON_URL
+        : current === DEFAULT_FOLDER_ICON_URL
+          ? ''
+          : current,
+    );
+  };
+
+  const handleSelectFile = async () => {
+    const result = await window.electronAPI.selectFile(text.selectFile);
+    if (!result.canceled && result.filePath) {
+      await applyPathSelection(result.filePath);
+    }
+  };
+
+  const handleSelectFolder = async () => {
+    const result = await window.electronAPI.selectFolder(text.selectFolder);
+    if (!result.canceled && result.filePath) {
+      await applyPathSelection(result.filePath, 'folder');
+    }
   };
 
   const handleSave = () => {
@@ -103,133 +154,138 @@ export function EditKeyModal({ keyConfig }: EditKeyModalProps) {
   };
 
   return (
-    <Modal title={`Edit Key: ${keyConfig.tabId} / ${keyConfig.id}`} width={550}>
-      <div
-        style={{
-          padding: '12px',
-          backgroundColor: 'var(--selected-background-color)',
-          borderRadius: '6px',
-          opacity: 0.9,
-        }}
-      >
-        <div className="modal-row" style={{ marginBottom: 0 }}>
-          <label>Quick Select</label>
-          <div style={{ position: 'relative', flexGrow: 1 }}>
-            <input
-              type="text"
-              value={appSearch}
-              onChange={(e) => {
-                setAppSearch(e.target.value);
-                setShowAppDropdown(true);
+    <Modal title={`${text.title}: ${keyConfig.tabId} / ${keyConfig.id}`} width={620}>
+      <div className="modal-row modal-row-quick-select">
+        <label>{text.quickSelect}</label>
+        <div className="modal-field app-picker-field">
+          <input
+            type="text"
+            value={appSearch}
+            onChange={(e) => {
+              setAppSearch(e.target.value);
+              setShowAppDropdown(true);
+            }}
+            onFocus={() => setShowAppDropdown(true)}
+            onBlur={() => setTimeout(() => setShowAppDropdown(false), 200)}
+            onKeyDown={handleKeyDown}
+            placeholder={text.quickSelectPlaceholder}
+          />
+          {showAppDropdown && filteredApps.length > 0 && (
+            <div
+              className="dropdown-menu app-picker-dropdown"
+              style={{
+                left: 0,
+                right: 0,
+                maxHeight: '200px',
+                overflowY: 'auto',
               }}
-              onFocus={() => setShowAppDropdown(true)}
-              onBlur={() => setTimeout(() => setShowAppDropdown(false), 200)}
-              onKeyDown={handleKeyDown}
-              placeholder="(Optional) Search to auto-fill below..."
-              style={{ width: '100%' }}
-            />
-            {showAppDropdown && filteredApps.length > 0 && (
-              <div
-                className="dropdown-menu"
-                style={{
-                  left: 0,
-                  right: 0,
-                  maxHeight: '200px',
-                  overflowY: 'auto',
-                }}
-              >
-                {filteredApps.map((app, index) => (
-                  <div
-                    key={`${app.filePath}-${index}`}
-                    ref={index === selectedIndex ? selectedItemRef : null}
-                    className={`dropdown-item${index === selectedIndex ? ' selected' : ''}`}
-                    onMouseDown={() => handleSelectApp(app)}
-                    onMouseEnter={() => setSelectedIndex(index)}
-                  >
-                    {app.label}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+            >
+              {filteredApps.map((app, index) => (
+                <div
+                  key={`${app.filePath}-${index}`}
+                  ref={index === selectedIndex ? selectedItemRef : null}
+                  className={`dropdown-item${index === selectedIndex ? ' selected' : ''}`}
+                  onMouseDown={() => handleSelectApp(app)}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                >
+                  {app.label}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       <div className="context-menu-separator" style={{ margin: '16px 0' }} />
 
+      <div className="modal-row modal-row-file-actions">
+        <span className="modal-row-label-spacer" aria-hidden="true" />
+        <div className="file-picker-actions">
+          <button type="button" onClick={() => void handleSelectFile()}>
+            {text.selectFile}
+          </button>
+          <button type="button" onClick={() => void handleSelectFolder()}>
+            {text.selectFolder}
+          </button>
+        </div>
+      </div>
+
       <div className="modal-row">
-        <label>Label *</label>
+        <label>{text.label}</label>
         <input
           type="text"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="Display name"
+          placeholder={text.labelPlaceholder}
           autoFocus
         />
       </div>
 
-      <div className="modal-row">
-        <label>File Path *</label>
-        <input
-          type="text"
-          value={filePath}
-          onChange={(e) => setFilePath(e.target.value)}
-          placeholder="Program path"
-        />
+      <div className="modal-row modal-row-path">
+        <label>{text.path}</label>
+        <div className="path-picker">
+          <input
+            className="path-picker-input"
+            type="text"
+            value={filePath}
+            onChange={(e) => setFilePath(e.target.value)}
+            placeholder={text.pathPlaceholder}
+          />
+        </div>
       </div>
 
       <div className="modal-row">
-        <label>Arguments</label>
+        <label>{text.args}</label>
         <input
           type="text"
           value={args}
           onChange={(e) => setArgs(e.target.value)}
-          placeholder="Commandline arguments"
+          placeholder={text.argsPlaceholder}
         />
       </div>
 
       <div className="modal-row">
-        <label>Working Directory</label>
+        <label>{text.workingDirectory}</label>
         <input
           type="text"
           value={workingDirectory}
           onChange={(e) => setWorkingDirectory(e.target.value)}
-          placeholder="Working directory"
+          placeholder={text.workingDirectoryPlaceholder}
         />
       </div>
 
       <div className="modal-row">
-        <label>Description</label>
+        <label>{text.description}</label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Tooltip text"
+          placeholder={text.descriptionPlaceholder}
         />
       </div>
 
       {IS_WINDOWS && (
         <div className="modal-row">
-          <label>Run as Admin</label>
+          <label>{text.runAsAdmin}</label>
           <input
             type="checkbox"
             checked={runAsAdmin}
             onChange={(e) => setRunAsAdmin(e.target.checked)}
           />
           <span style={{ opacity: 0.5, fontSize: '12px', marginLeft: '8px' }}>
-            Only enable if you understand the consequences
+            {text.adminWarning}
           </span>
         </div>
       )}
 
       <div className="modal-row">
-        <label>Icon Path</label>
-        <div style={{ display: 'flex', gap: '8px', flexGrow: 1 }}>
+        <label>{text.iconPath}</label>
+        <div className="path-picker icon-path-picker">
           <input
+            className="path-picker-input"
             type="text"
             value={iconPath}
             onChange={(e) => setIconPath(e.target.value)}
-            placeholder="Custom icon path (file/url)"
-            style={{ flexGrow: 1 }}
+            placeholder={text.iconPlaceholder}
           />
           <input
             ref={iconInputRef}
@@ -245,16 +301,16 @@ export function EditKeyModal({ keyConfig }: EditKeyModalProps) {
             }}
           />
           <button type="button" onClick={() => iconInputRef.current?.click()}>
-            Browse
+            {text.browse}
           </button>
         </div>
       </div>
 
       <div className="modal-actions">
         <button onClick={handleSave} disabled={!label.trim() || !filePath.trim()}>
-          Save
+          {i18n.common.save}
         </button>
-        <button onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>Cancel</button>
+        <button onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>{i18n.common.cancel}</button>
       </div>
     </Modal>
   );

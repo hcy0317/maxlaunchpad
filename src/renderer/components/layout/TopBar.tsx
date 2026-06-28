@@ -1,10 +1,16 @@
 import type { ReactElement } from 'react';
 import { useCallback, useRef, useState } from 'react';
 
-import { APP_NAME, DOCUMENTATION_URL } from '../../../shared/constants';
+import {
+  APP_NAME,
+  DEFAULT_MENU_REVEAL_KEY,
+  DOCUMENTATION_URL,
+  MODIFIER_KEYS,
+} from '../../../shared/constants';
 import type { HideElements, KeyboardProfile } from '../../../shared/types';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { useCloseOnWindowHide } from '../../hooks/useCloseOnWindowHide';
+import { getI18n } from '../../i18n';
 import { IS_MAC, IS_WINDOWS } from '../../platform';
 import { useAppState, useDispatch } from '../../state/store';
 import { SearchBox } from './SearchBox';
@@ -21,10 +27,19 @@ export function TopBar(): ReactElement {
   // After loading, settings is guaranteed to be non-null
   const settings = state.settings!;
   const hideElements = settings.hideElements;
+  const i18n = getI18n(settings.language);
+  const t = i18n.topBar;
 
-  // Determine if menu should be visible
+  // Determine if menu items should be visible
   const isMenuHidden = hideElements.menu;
-  const shouldShowMenu = !isMenuHidden || state.ui.isAltPressed || openMenu !== null;
+  const menuRevealKey = settings.menuRevealKey ?? DEFAULT_MENU_REVEAL_KEY;
+  const menuRevealKeyLabel =
+    (MODIFIER_KEYS.find((mod) => mod.id === menuRevealKey)?.[IS_MAC ? 'macLabel' : 'winLabel'] ??
+      menuRevealKey);
+  const hideMenuLabel = t.hideMenu.replace('{key}', menuRevealKeyLabel);
+  const hideMenuTitle = t.hideMenuTitle.replace('{key}', menuRevealKeyLabel);
+  const shouldShowMenuItems =
+    !isMenuHidden || state.ui.isMenuRevealKeyPressed || openMenu !== null;
 
   const closeMenu = useCallback(() => {
     setOpenMenu(null);
@@ -53,7 +68,7 @@ export function TopBar(): ReactElement {
       await window.electronAPI.saveProfile(state.profile, state.settings.activeProfilePath);
       dispatch({ type: 'SET_CONFIG_DIRTY', dirty: false });
     } catch (error) {
-      dispatch({ type: 'SET_ERROR', error: 'Failed to save configuration' });
+      dispatch({ type: 'SET_ERROR', error: i18n.errors.saveConfigurationFailed });
       throw error;
     }
   };
@@ -67,7 +82,7 @@ export function TopBar(): ReactElement {
     try {
       await flushCurrentConfig();
 
-      const result = await window.electronAPI.saveAsDialog();
+      const result = await window.electronAPI.saveAsDialog(t.saveProfileDialogTitle);
       if (result.canceled || !result.filePath) {
         return;
       }
@@ -88,7 +103,7 @@ export function TopBar(): ReactElement {
         profile,
       });
     } catch {
-      dispatch({ type: 'SET_ERROR', error: 'Failed to create new profile' });
+      dispatch({ type: 'SET_ERROR', error: i18n.errors.createProfileFailed });
     }
   };
 
@@ -101,7 +116,7 @@ export function TopBar(): ReactElement {
     try {
       await flushCurrentConfig();
 
-      const result = await window.electronAPI.openProfileDialog();
+      const result = await window.electronAPI.openProfileDialog(t.openProfileDialogTitle);
       if (result.canceled || !result.filePath) {
         return;
       }
@@ -115,7 +130,7 @@ export function TopBar(): ReactElement {
       const { settings, profile } = await window.electronAPI.loadConfig();
       dispatch({ type: 'SET_CONFIG', settings, profile });
     } catch {
-      dispatch({ type: 'SET_ERROR', error: 'Failed to open profile' });
+      dispatch({ type: 'SET_ERROR', error: i18n.errors.openProfileFailed });
     }
   };
 
@@ -128,7 +143,7 @@ export function TopBar(): ReactElement {
     try {
       await flushCurrentConfig();
 
-      const result = await window.electronAPI.saveAsDialog();
+      const result = await window.electronAPI.saveAsDialog(t.saveProfileDialogTitle);
       if (result.canceled || !result.filePath) {
         return;
       }
@@ -149,7 +164,7 @@ export function TopBar(): ReactElement {
     } catch {
       dispatch({
         type: 'SET_ERROR',
-        error: 'Failed to save profile as new file',
+        error: i18n.errors.saveProfileAsFailed,
       });
     }
   };
@@ -159,20 +174,34 @@ export function TopBar(): ReactElement {
     void window.electronAPI.exitApp();
   };
 
-  const handleToggleDragDrop = () => {
+  const handleMinimizeWindow = () => {
     closeMenu();
-    const newValue = !state.ui.isDragDropMode;
-    dispatch({ type: 'SET_DRAG_DROP_MODE', enabled: newValue });
-    void window.electronAPI.setDragDropMode(newValue);
+    void window.electronAPI.minimizeWindow();
   };
 
-  const handleToggleLockCenter = () => {
+  const handleCloseWindow = () => {
     closeMenu();
-    const newValue = !state.settings?.lockWindowCenter;
+    void window.electronAPI.hideWindow();
+  };
+
+  const handleSelectDragDrop = () => {
+    closeMenu();
+    dispatch({ type: 'SET_DRAG_DROP_MODE', enabled: true });
     dispatch({
       type: 'UPDATE_SETTINGS',
-      settings: { lockWindowCenter: newValue },
+      settings: { lockWindowCenter: false },
     });
+    void window.electronAPI.setDragDropMode(true);
+  };
+
+  const handleSelectLockCenter = () => {
+    closeMenu();
+    dispatch({ type: 'SET_DRAG_DROP_MODE', enabled: false });
+    dispatch({
+      type: 'UPDATE_SETTINGS',
+      settings: { lockWindowCenter: true },
+    });
+    void window.electronAPI.setLockWindowCenter(true);
   };
 
   const handleOpenUserApplicationsFolder = () => {
@@ -245,231 +274,250 @@ export function TopBar(): ReactElement {
     });
   };
 
-  // Don't render if menu is hidden and not showing
-  if (!shouldShowMenu) {
-    return <div className="main-menu menu-hidden" ref={menuRef} />;
-  }
-
   return (
     <div className="main-menu" ref={menuRef}>
-      {/* File menu */}
-      <div
-        className="menu-item"
-        onClick={() => handleMenuClick('file')}
-        onMouseEnter={() => handleMenuHover('file')}
-      >
-        File
-        {openMenu === 'file' && (
-          <div className="dropdown-menu">
-            <div className="dropdown-item" onClick={handleNew}>
-              New
-            </div>
-            <div className="dropdown-item" onClick={handleOpen}>
-              Open...
-            </div>
-            <div className="dropdown-item" onClick={handleSaveAs}>
-              Save As...
-            </div>
-            <div className="context-menu-separator" />
-            <div className="dropdown-item" onClick={handleExit}>
-              Exit
-            </div>
-          </div>
-        )}
+      <div className="app-title" title={APP_NAME}>
+        {APP_NAME}
       </div>
-
-      {/* View menu */}
       <div
-        className="menu-item"
-        onClick={() => handleMenuClick('view')}
-        onMouseEnter={() => handleMenuHover('view')}
+        className={`topbar-menu-items${shouldShowMenuItems ? '' : ' menu-items-hidden'}`}
+        aria-hidden={!shouldShowMenuItems}
       >
-        View
-        {openMenu === 'view' && (
-          <div className="dropdown-menu">
-            <div
-              className="dropdown-item"
-              onClick={handleToggleDragDrop}
-              title="When enabled, the window stays visible and movable in this session"
-            >
-              <span className="menu-check">{state.ui.isDragDropMode ? '✓' : ''}</span>
-              Drag & Drop Mode
+        {/* File menu */}
+        <div
+          className="menu-item"
+          onClick={() => handleMenuClick('file')}
+          onMouseEnter={() => handleMenuHover('file')}
+        >
+          {t.file}
+          {openMenu === 'file' && (
+            <div className="dropdown-menu">
+              <div className="dropdown-item" onClick={handleNew}>
+                {t.new}
+              </div>
+              <div className="dropdown-item" onClick={handleOpen}>
+                {t.open}
+              </div>
+              <div className="dropdown-item" onClick={handleSaveAs}>
+                {t.saveAs}
+              </div>
+              <div className="context-menu-separator" />
+              <div className="dropdown-item" onClick={handleExit}>
+                {t.exit}
+              </div>
             </div>
-            <div
-              className="dropdown-item"
-              onClick={handleToggleLockCenter}
-              title="When enabled, window centers and can't be dragged"
-            >
-              <span className="menu-check">{state.settings?.lockWindowCenter ? '✓' : ''}</span>
-              Lock Window Center
-            </div>
-            <div className="context-menu-separator" />
-            {/* Hide Elements submenu */}
-            <div
-              className="dropdown-item dropdown-submenu"
-              onMouseEnter={() => setHideSubmenuOpen(true)}
-              onMouseLeave={() => setHideSubmenuOpen(false)}
-            >
-              <span className="menu-check"></span>
-              Hide Elements
-              <span className="submenu-arrow">▸</span>
-              {hideSubmenuOpen && (
-                <div className="dropdown-menu submenu">
-                  <div
-                    className="dropdown-item"
-                    onClick={() => handleToggleHideElement('menu')}
-                    title="Hide menu bar (press Alt to show temporarily)"
-                  >
-                    <span className="menu-check">{hideElements.menu ? '✓' : ''}</span>
-                    Menu (press Alt to show)
-                  </div>
-                  <div
-                    className="dropdown-item"
-                    onClick={() => handleToggleHideElement('buttonIcons')}
-                    title="Hide button icons"
-                  >
-                    <span className="menu-check">{hideElements.buttonIcons ? '✓' : ''}</span>
-                    Button Icons
-                  </div>
-                  <div
-                    className="dropdown-item"
-                    onClick={() => handleToggleHideElement('buttonText')}
-                    title="Hide button text labels"
-                  >
-                    <span className="menu-check">{hideElements.buttonText ? '✓' : ''}</span>
-                    Button Text
-                  </div>
-                  <div
-                    className="dropdown-item"
-                    onClick={() => handleToggleHideElement('emptyButtons')}
-                    title="Hide buttons without configured programs"
-                  >
-                    <span className="menu-check">{hideElements.emptyButtons ? '✓' : ''}</span>
-                    Empty Buttons
-                  </div>
-                  <div className="context-menu-separator" />
-                  <div
-                    className="dropdown-item"
-                    onClick={() => handleToggleHideElement('rowF')}
-                    title="Hide function keys row (F1-F10)"
-                  >
-                    <span className="menu-check">{hideElements.rowF ? '✓' : ''}</span>
-                    Row F
-                  </div>
-                  <div
-                    className="dropdown-item"
-                    onClick={() => handleToggleHideElement('row1')}
-                    title="Hide letter keys row 1 (Q-P)"
-                  >
-                    <span className="menu-check">{hideElements.row1 ? '✓' : ''}</span>
-                    Row 1
-                  </div>
-                  <div
-                    className="dropdown-item"
-                    onClick={() => handleToggleHideElement('row2')}
-                    title="Hide letter keys row 2 (A-;)"
-                  >
-                    <span className="menu-check">{hideElements.row2 ? '✓' : ''}</span>
-                    Row 2
-                  </div>
-                  <div
-                    className="dropdown-item"
-                    onClick={() => handleToggleHideElement('row3')}
-                    title="Hide letter keys row 3 (Z-/)"
-                  >
-                    <span className="menu-check">{hideElements.row3 ? '✓' : ''}</span>
-                    Row 3
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* Tools menu - platform-specific */}
-      <div
-        className="menu-item"
-        onClick={() => handleMenuClick('tools')}
-        onMouseEnter={() => handleMenuHover('tools')}
-      >
-        Tools
-        {openMenu === 'tools' && (
-          <div className="dropdown-menu">
-            {(() => {
-              const labels = IS_MAC
-                ? {
-                    user: 'Open Applications Folder (User)',
-                    system: 'Open Applications Folder (System)',
-                  }
-                : IS_WINDOWS
+        {/* View menu */}
+        <div
+          className="menu-item"
+          onClick={() => handleMenuClick('view')}
+          onMouseEnter={() => handleMenuHover('view')}
+        >
+          {t.view}
+          {openMenu === 'view' && (
+            <div className="dropdown-menu">
+              <div className="dropdown-item" onClick={handleSelectDragDrop} title={t.dragDropTitle}>
+                <span className="menu-check">{state.ui.isDragDropMode ? '✓' : ''}</span>
+                {t.dragDropMode}
+              </div>
+              <div
+                className="dropdown-item"
+                onClick={handleSelectLockCenter}
+                title={t.lockCenterTitle}
+              >
+                <span className="menu-check">{state.settings?.lockWindowCenter ? '✓' : ''}</span>
+                {t.lockWindowCenter}
+              </div>
+              <div className="context-menu-separator" />
+              {/* Hide Elements submenu */}
+              <div
+                className="dropdown-item dropdown-submenu"
+                onMouseEnter={() => setHideSubmenuOpen(true)}
+                onMouseLeave={() => setHideSubmenuOpen(false)}
+              >
+                <span className="menu-check"></span>
+                {t.hideElements}
+                <span className="submenu-arrow">▸</span>
+                {hideSubmenuOpen && (
+                  <div className="dropdown-menu submenu">
+                    <div
+                      className="dropdown-item"
+                      onClick={() => handleToggleHideElement('menu')}
+                      title={hideMenuTitle}
+                    >
+                      <span className="menu-check">{hideElements.menu ? '✓' : ''}</span>
+                      {hideMenuLabel}
+                    </div>
+                    <div
+                      className="dropdown-item"
+                      onClick={() => handleToggleHideElement('buttonIcons')}
+                      title={t.buttonIconsTitle}
+                    >
+                      <span className="menu-check">{hideElements.buttonIcons ? '✓' : ''}</span>
+                      {t.buttonIcons}
+                    </div>
+                    <div
+                      className="dropdown-item"
+                      onClick={() => handleToggleHideElement('buttonText')}
+                      title={t.buttonTextTitle}
+                    >
+                      <span className="menu-check">{hideElements.buttonText ? '✓' : ''}</span>
+                      {t.buttonText}
+                    </div>
+                    <div
+                      className="dropdown-item"
+                      onClick={() => handleToggleHideElement('emptyButtons')}
+                      title={t.emptyButtonsTitle}
+                    >
+                      <span className="menu-check">{hideElements.emptyButtons ? '✓' : ''}</span>
+                      {t.emptyButtons}
+                    </div>
+                    <div className="context-menu-separator" />
+                    <div
+                      className="dropdown-item"
+                      onClick={() => handleToggleHideElement('rowF')}
+                      title={t.rowFTitle}
+                    >
+                      <span className="menu-check">{hideElements.rowF ? '✓' : ''}</span>
+                      {t.rowF}
+                    </div>
+                    <div
+                      className="dropdown-item"
+                      onClick={() => handleToggleHideElement('row1')}
+                      title={t.row1Title}
+                    >
+                      <span className="menu-check">{hideElements.row1 ? '✓' : ''}</span>
+                      {t.row1}
+                    </div>
+                    <div
+                      className="dropdown-item"
+                      onClick={() => handleToggleHideElement('row2')}
+                      title={t.row2Title}
+                    >
+                      <span className="menu-check">{hideElements.row2 ? '✓' : ''}</span>
+                      {t.row2}
+                    </div>
+                    <div
+                      className="dropdown-item"
+                      onClick={() => handleToggleHideElement('row3')}
+                      title={t.row3Title}
+                    >
+                      <span className="menu-check">{hideElements.row3 ? '✓' : ''}</span>
+                      {t.row3}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Tools menu - platform-specific */}
+        <div
+          className="menu-item"
+          onClick={() => handleMenuClick('tools')}
+          onMouseEnter={() => handleMenuHover('tools')}
+        >
+          {t.tools}
+          {openMenu === 'tools' && (
+            <div className="dropdown-menu">
+              {(() => {
+                const labels = IS_MAC
                   ? {
-                      user: 'Open Start Menu (User)',
-                      system: 'Open Start Menu (All Users)',
+                      user: t.openApplicationsFolderUser,
+                      system: t.openApplicationsFolderSystem,
                     }
-                  : {
-                      user: 'Open Applications Directory (User)',
-                      system: 'Open Applications Directory (System)',
-                    };
-              return (
-                <>
-                  <div className="dropdown-item" onClick={handleOpenUserApplicationsFolder}>
-                    {labels.user}
-                  </div>
-                  <div className="dropdown-item" onClick={handleOpenSystemApplicationsFolder}>
-                    {labels.system}
-                  </div>
-                </>
-              );
-            })()}
-            <div className="context-menu-separator" />
-            <div className="dropdown-item" onClick={handleOpenMyConfigFolders}>
-              Open My Config Folders
+                  : IS_WINDOWS
+                    ? {
+                        user: t.openStartMenuUser,
+                        system: t.openStartMenuSystem,
+                      }
+                    : {
+                        user: t.openApplicationsDirectoryUser,
+                        system: t.openApplicationsDirectorySystem,
+                      };
+                return (
+                  <>
+                    <div className="dropdown-item" onClick={handleOpenUserApplicationsFolder}>
+                      {labels.user}
+                    </div>
+                    <div className="dropdown-item" onClick={handleOpenSystemApplicationsFolder}>
+                      {labels.system}
+                    </div>
+                  </>
+                );
+              })()}
+              <div className="context-menu-separator" />
+              <div className="dropdown-item" onClick={handleOpenMyConfigFolders}>
+                {t.openConfigFolders}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* Settings menu */}
-      <div
-        className="menu-item"
-        onClick={() => handleMenuClick('settings')}
-        onMouseEnter={() => handleMenuHover('settings')}
-      >
-        Settings
-        {openMenu === 'settings' && (
-          <div className="dropdown-menu">
-            <div className="dropdown-item" onClick={handleHotkey}>
-              Hotkey
+        {/* Settings menu */}
+        <div
+          className="menu-item"
+          onClick={() => handleMenuClick('settings')}
+          onMouseEnter={() => handleMenuHover('settings')}
+        >
+          {t.settings}
+          {openMenu === 'settings' && (
+            <div className="dropdown-menu">
+              <div className="dropdown-item" onClick={handleHotkey}>
+                {t.hotkey}
+              </div>
+              <div className="dropdown-item" onClick={handleOptions}>
+                {t.options}
+              </div>
             </div>
-            <div className="dropdown-item" onClick={handleOptions}>
-              Options
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* Help menu */}
-      <div
-        className="menu-item"
-        onClick={() => handleMenuClick('help')}
-        onMouseEnter={() => handleMenuHover('help')}
-      >
-        Help
-        {openMenu === 'help' && (
-          <div className="dropdown-menu">
-            <div className="dropdown-item" onClick={handleDocumentation}>
-              Documentation
+        {/* Help menu */}
+        <div
+          className="menu-item"
+          onClick={() => handleMenuClick('help')}
+          onMouseEnter={() => handleMenuHover('help')}
+        >
+          {t.help}
+          {openMenu === 'help' && (
+            <div className="dropdown-menu">
+              <div className="dropdown-item" onClick={handleDocumentation}>
+                {t.documentation}
+              </div>
+              <div className="dropdown-item" onClick={handleAbout}>
+                {t.about} {APP_NAME}
+              </div>
             </div>
-            <div className="dropdown-item" onClick={handleAbout}>
-              About {APP_NAME}
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Search box */}
       <SearchBox />
+      <div className="window-controls" aria-label={APP_NAME}>
+        <button
+          type="button"
+          className="window-control minimize"
+          aria-label={t.minimizeWindow}
+          title={t.minimizeWindow}
+          onClick={handleMinimizeWindow}
+        >
+          <span aria-hidden="true">-</span>
+        </button>
+        <button
+          type="button"
+          className="window-control close"
+          aria-label={t.closeWindow}
+          title={t.closeWindow}
+          onClick={handleCloseWindow}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,9 @@
-import type { ChangeEvent, ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import type { ChangeEvent, FocusEvent, ReactElement } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 
+import type { AppLanguage } from '../../../shared/types';
+import { getI18n, LANGUAGE_OPTIONS } from '../../i18n';
 import { useAppState, useDispatch } from '../../state/store';
 import { Modal } from '../common/Modal';
 
@@ -13,14 +16,20 @@ export function OptionsModal(): ReactElement {
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(
     state.settings?.theme ?? 'system',
   );
+  const [language, setLanguage] = useState<AppLanguage>(state.settings?.language ?? 'zh');
   const [customStyle, setCustomStyle] = useState<string>(state.settings?.customStyle ?? 'default');
   const [availableStyles, setAvailableStyles] = useState<string[]>([]);
+  const cleanupLanguageSelectRef = useRef<(() => void) | null>(null);
+  const lastCommittedLanguageRef = useRef<AppLanguage>(state.settings?.language ?? 'zh');
+  const i18n = getI18n(language);
 
   useEffect(() => {
     if (state.settings) {
       setLaunchOnStartup(state.settings.launchOnStartup);
       setStartInTray(state.settings.startInTray);
       setTheme(state.settings.theme);
+      setLanguage(state.settings.language);
+      lastCommittedLanguageRef.current = state.settings.language;
       setCustomStyle(state.settings.customStyle);
     }
   }, [state.settings]);
@@ -39,13 +48,13 @@ export function OptionsModal(): ReactElement {
       } catch (error) {
         const message =
           error instanceof Error
-            ? `Failed to load styles: ${error.message}`
-            : 'Failed to load styles';
+            ? `${i18n.options.loadStylesFailed}: ${error.message}`
+            : i18n.options.loadStylesFailed;
         dispatch({ type: 'SET_ERROR', error: message });
       }
     }
     void loadStyles();
-  }, [dispatch]);
+  }, [dispatch, i18n.options.loadStylesFailed]);
 
   const handleLaunchOnStartupChange = (e: ChangeEvent<HTMLInputElement>) => {
     const checked = e.target.checked;
@@ -74,6 +83,60 @@ export function OptionsModal(): ReactElement {
     });
   };
 
+  const commitLanguage = useCallback((value: AppLanguage) => {
+    if (lastCommittedLanguageRef.current === value) {
+      return;
+    }
+    lastCommittedLanguageRef.current = value;
+
+    flushSync(() => {
+      setLanguage(value);
+      dispatch({
+        type: 'UPDATE_SETTINGS',
+        settings: { language: value },
+      });
+    });
+  }, [dispatch]);
+
+  const setLanguageSelectRef = useCallback((select: HTMLSelectElement | null) => {
+    cleanupLanguageSelectRef.current?.();
+    cleanupLanguageSelectRef.current = null;
+
+    if (!select) {
+      return;
+    }
+
+    const handleNativeLanguageCommit = () => {
+      const nextLanguage = select.value as AppLanguage;
+      commitLanguage(nextLanguage);
+      window.setTimeout(() => {
+        commitLanguage(nextLanguage);
+      }, 0);
+    };
+
+    select.addEventListener('input', handleNativeLanguageCommit);
+    select.addEventListener('change', handleNativeLanguageCommit);
+    select.addEventListener('blur', handleNativeLanguageCommit);
+    cleanupLanguageSelectRef.current = () => {
+      select.removeEventListener('input', handleNativeLanguageCommit);
+      select.removeEventListener('change', handleNativeLanguageCommit);
+      select.removeEventListener('blur', handleNativeLanguageCommit);
+    };
+  }, [commitLanguage]);
+
+  useEffect(() => {
+    return () => {
+      cleanupLanguageSelectRef.current?.();
+      cleanupLanguageSelectRef.current = null;
+    };
+  }, []);
+
+  const handleLanguageChange = (
+    e: ChangeEvent<HTMLSelectElement> | FocusEvent<HTMLSelectElement>,
+  ) => {
+    commitLanguage(e.currentTarget.value as AppLanguage);
+  };
+
   const handleCustomStyleChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
     setCustomStyle(value);
@@ -84,7 +147,7 @@ export function OptionsModal(): ReactElement {
   };
 
   return (
-    <Modal title="Options">
+    <Modal title={i18n.options.title}>
       <div className="modal-row">
         <div className="modifier-keys">
           <label>
@@ -93,7 +156,7 @@ export function OptionsModal(): ReactElement {
               checked={launchOnStartup}
               onChange={handleLaunchOnStartupChange}
             />
-            Launch on Startup
+            {i18n.options.launchOnStartup}
           </label>
         </div>
       </div>
@@ -102,22 +165,39 @@ export function OptionsModal(): ReactElement {
         <div className="modifier-keys">
           <label>
             <input type="checkbox" checked={startInTray} onChange={handleStartInTrayChange} />
-            Start in Tray (Minimized)
+            {i18n.options.startInTray}
           </label>
         </div>
       </div>
 
       <div className="modal-row">
-        <label>Theme:</label>
-        <select value={theme} onChange={handleThemeChange}>
-          <option value="system">system</option>
-          <option value="light">light</option>
-          <option value="dark">dark</option>
+        <label>{i18n.options.language}</label>
+        <select
+          ref={setLanguageSelectRef}
+          value={language}
+          onBlur={handleLanguageChange}
+          onChange={handleLanguageChange}
+          onInput={handleLanguageChange}
+        >
+          {LANGUAGE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </div>
 
       <div className="modal-row">
-        <label>Custom Style:</label>
+        <label>{i18n.options.theme}</label>
+        <select value={theme} onChange={handleThemeChange}>
+          <option value="system">{i18n.options.themeSystem}</option>
+          <option value="light">{i18n.options.themeLight}</option>
+          <option value="dark">{i18n.options.themeDark}</option>
+        </select>
+      </div>
+
+      <div className="modal-row">
+        <label>{i18n.options.customStyle}</label>
         <select value={customStyle} onChange={handleCustomStyleChange}>
           {availableStyles.map((style) => (
             <option key={style} value={style}>
@@ -128,7 +208,7 @@ export function OptionsModal(): ReactElement {
       </div>
 
       <div className="modal-actions">
-        <button onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>Close</button>
+        <button onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>{i18n.common.close}</button>
       </div>
     </Modal>
   );
