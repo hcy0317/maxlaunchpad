@@ -1,3 +1,4 @@
+import { DEFAULT_HIDE_ELEMENTS } from '../constants';
 import {
   AppSettingsSchema,
   HotkeyConfigSchema,
@@ -228,14 +229,17 @@ describe('HotkeyConfigSchema', () => {
 describe('AppSettingsSchema', () => {
   const validSettings = {
     hotkey: { modifiers: ['Command'], key: 'Space' },
+    menuRevealKey: 'Alt' as const,
     activeTabOnShow: '1',
     activeProfilePath: '/path/to/profile.yaml',
     lockWindowCenter: true,
     launchOnStartup: false,
     startInTray: true,
     theme: 'dark' as const,
+    language: 'zh' as const,
     customStyle: '.key { color: red; }',
     windowSize: { width: 1000, height: 600 },
+    hideElements: { ...DEFAULT_HIDE_ELEMENTS },
   };
 
   it('should validate complete settings', () => {
@@ -264,14 +268,17 @@ describe('AppSettingsSchema', () => {
   it('should reject settings missing required fields', () => {
     const requiredFields = [
       'hotkey',
+      'menuRevealKey',
       'activeTabOnShow',
       'activeProfilePath',
       'lockWindowCenter',
       'launchOnStartup',
       'startInTray',
       'theme',
+      'language',
       'customStyle',
       'windowSize',
+      'hideElements',
     ];
 
     requiredFields.forEach((field) => {
@@ -286,6 +293,15 @@ describe('AppSettingsSchema', () => {
     const invalidSettings = {
       ...validSettings,
       hotkey: { key: 'Space' }, // missing modifiers
+    };
+    const result = AppSettingsSchema.safeParse(invalidSettings);
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject settings with invalid menu reveal key', () => {
+    const invalidSettings = {
+      ...validSettings,
+      menuRevealKey: 'Space',
     };
     const result = AppSettingsSchema.safeParse(invalidSettings);
     expect(result.success).toBe(false);
@@ -325,6 +341,11 @@ describe('PartialAppSettingsSchema', () => {
       hotkey: { modifiers: ['Control'], key: 'Space' },
     };
     const result = PartialAppSettingsSchema.safeParse(partial);
+    expect(result.success).toBe(true);
+  });
+
+  it('should validate settings with only menu reveal key', () => {
+    const result = PartialAppSettingsSchema.safeParse({ menuRevealKey: 'Win' });
     expect(result.success).toBe(true);
   });
 

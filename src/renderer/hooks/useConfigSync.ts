@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react';
 
+import { getI18n } from '../i18n';
 import { useAppState, useDispatch } from '../state/store';
 
 export function useConfigSync() {
   const state = useAppState();
   const dispatch = useDispatch();
   const isFirstRender = useRef(true);
+  const saveConfigurationFailed = getI18n(state.settings?.language).errors.saveConfigurationFailed;
 
   useEffect(() => {
     if (isFirstRender.current) {
@@ -23,10 +25,10 @@ export function useConfigSync() {
         await window.electronAPI.saveProfile(state.profile!, state.settings!.activeProfilePath);
         dispatch({ type: 'SET_CONFIG_DIRTY', dirty: false });
       } catch {
-        dispatch({ type: 'SET_ERROR', error: 'Failed to save configuration' });
+        dispatch({ type: 'SET_ERROR', error: saveConfigurationFailed });
       }
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [state.settings, state.profile, state.ui.isConfigDirty, dispatch]);
+  }, [state.settings, state.profile, state.ui.isConfigDirty, dispatch, saveConfigurationFailed]);
 }

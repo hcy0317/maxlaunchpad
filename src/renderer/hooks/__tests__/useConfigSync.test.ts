@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import React from 'react';
 
+import { DEFAULT_HIDE_ELEMENTS } from '../../../shared/constants';
 import type { AppSettings, KeyboardProfile } from '../../../shared/types';
 import { AppStateProvider, useAppState, useDispatch } from '../../state/store';
 import { useConfigSync } from '../useConfigSync';
@@ -54,13 +55,16 @@ void _TestComponent;
 const mockSettings: AppSettings = {
   activeProfilePath: '/path/to/profile.yaml',
   hotkey: { modifiers: ['Command', 'Shift'], key: 'Space' },
+  menuRevealKey: 'Alt',
   activeTabOnShow: 'lastUsed',
   lockWindowCenter: false,
   launchOnStartup: false,
   startInTray: false,
   theme: 'system',
+  language: 'zh',
   customStyle: 'default',
   windowSize: { width: 1000, height: 600 },
+  hideElements: { ...DEFAULT_HIDE_ELEMENTS },
 };
 
 const mockProfile: KeyboardProfile = {
@@ -287,7 +291,7 @@ describe('useConfigSync', () => {
     rerender();
 
     await waitFor(() => {
-      expect(capturedState!.ui.error).toBe('Failed to save configuration');
+      expect(capturedState!.ui.error).toBe('保存配置失败');
     });
   });
 
