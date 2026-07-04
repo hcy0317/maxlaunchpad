@@ -139,6 +139,20 @@ describe('OptionsModal', () => {
     ]);
   });
 
+  it('uses the detected i18next language when settings omit language', async () => {
+    settings.language = undefined;
+    await act(async () => {
+      await i18n.changeLanguage('en');
+    });
+
+    render(<OptionsModal />);
+
+    const languageRow = screen.getByText('Language:').closest('.modal-row');
+    const languageSelect = languageRow?.querySelector('select') as HTMLSelectElement;
+
+    expect(languageSelect.value).toBe('en');
+  });
+
   it('does not duplicate language updates when native select events repeat', () => {
     const { container } = render(<OptionsModal />);
     const languageRow = screen.getByText('语言:').closest('.modal-row');
