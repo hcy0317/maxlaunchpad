@@ -2,6 +2,7 @@ import type { ChangeEvent, ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import type { AppLanguage } from '../../../shared/types';
 import { useAppState, useDispatch } from '../../state/store';
 import { Modal } from '../common/Modal';
 
@@ -86,7 +87,12 @@ export function OptionsModal(): ReactElement {
   };
 
   const handleLanguageChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    void i18n.changeLanguage(e.target.value);
+    const value = e.target.value as AppLanguage;
+    dispatch({
+      type: 'UPDATE_SETTINGS',
+      settings: { language: value },
+    });
+    void i18n.changeLanguage(value);
   };
 
   const currentLanguage = i18n.resolvedLanguage?.startsWith('zh') ? 'zh-CN' : 'en';
