@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { DEFAULT_HIDE_ELEMENTS } from '../../../../shared/constants';
 import type { AppSettings, KeyboardProfile } from '../../../../shared/types';
@@ -91,6 +91,47 @@ describe('OptionsModal', () => {
     expect(screen.getByText('Language:')).toBeInTheDocument();
   });
 
+  it('keeps language option labels stable across UI languages', async () => {
+    const { rerender } = render(<OptionsModal />);
+
+    let languageRow = screen.getByText('语言:').closest('.modal-row');
+    let languageSelect = languageRow?.querySelector('select') as HTMLSelectElement;
+    expect(Array.from(languageSelect.options).map((option) => option.textContent)).toEqual([
+      '中文',
+      'English',
+    ]);
+
+    await act(async () => {
+      await i18n.changeLanguage('en');
+    });
+    settings.language = 'en';
+    rerender(<OptionsModal />);
+
+    languageRow = screen.getByText('Language:').closest('.modal-row');
+    languageSelect = languageRow?.querySelector('select') as HTMLSelectElement;
+    expect(Array.from(languageSelect.options).map((option) => option.textContent)).toEqual([
+      '中文',
+      'English',
+    ]);
+  });
+
+  it('switches the options modal from Chinese to English', async () => {
+    render(<OptionsModal />);
+    const languageRow = screen.getByText('语言:').closest('.modal-row');
+    const languageSelect = languageRow?.querySelector('select') as HTMLSelectElement;
+
+    fireEvent.change(languageSelect, { target: { value: 'en' } });
+
+    expect(languageSelect.value).toBe('en');
+    expect(dispatchMock).toHaveBeenCalledWith({
+      type: 'UPDATE_SETTINGS',
+      settings: { language: 'en' },
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Language:')).toBeInTheDocument();
+    });
+  });
+
   it('uses the detected i18next language when settings omit language', async () => {
     settings.language = undefined;
     await act(async () => {
@@ -112,8 +153,7 @@ describe('OptionsModal', () => {
     });
   });
 
-  it('commits language changes from native select input/change/blur events', () => {
-    jest.useFakeTimers();
+  it('does not duplicate language updates when native select events repeat', () => {
     const { container } = render(<OptionsModal />);
     const languageRow = screen.getByText('语言:').closest('.modal-row');
     const languageSelect = languageRow?.querySelector('select') as HTMLSelectElement;
@@ -126,10 +166,8 @@ describe('OptionsModal', () => {
 
     act(() => {
       valueSetter!.call(languageSelect, 'en');
-      languageSelect.dispatchEvent(new Event('input', { bubbles: true }));
       languageSelect.dispatchEvent(new Event('change', { bubbles: true }));
       languageSelect.dispatchEvent(new Event('blur', { bubbles: true }));
-      jest.runOnlyPendingTimers();
     });
 
     expect(container.querySelector('.segmented-control')).not.toBeInTheDocument();
@@ -140,6 +178,5 @@ describe('OptionsModal', () => {
     expect(dispatchMock).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('dialog')).toHaveTextContent('Options');
     expect(screen.getByText('Language:')).toBeInTheDocument();
-    jest.useRealTimers();
   });
 });
