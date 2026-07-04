@@ -14,12 +14,16 @@ export function useConfigSync() {
     : null;
 
   useEffect(() => {
-    if (!configuredLanguage || i18n.resolvedLanguage === configuredLanguage) {
+    if (
+      !configuredLanguage ||
+      state.ui.isConfigDirty ||
+      i18n.resolvedLanguage === configuredLanguage
+    ) {
       return;
     }
 
     void i18n.changeLanguage(configuredLanguage);
-  }, [configuredLanguage, i18n]);
+  }, [configuredLanguage, i18n, state.ui.isConfigDirty]);
 
   useEffect(() => {
     if (isFirstRender.current) {

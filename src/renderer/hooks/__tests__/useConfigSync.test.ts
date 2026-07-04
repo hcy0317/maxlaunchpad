@@ -143,6 +143,37 @@ describe('useConfigSync', () => {
     expect(changeLanguageSpy).not.toHaveBeenCalled();
   });
 
+  it('does not restore a stale configured language while settings are dirty', async () => {
+    const changeLanguageSpy = jest.spyOn(i18n, 'changeLanguage');
+    let capturedDispatch: ReturnType<typeof useDispatch>;
+
+    const { rerender } = renderHook(
+      () => {
+        const dispatch = useDispatch();
+        capturedDispatch = dispatch;
+        useConfigSync();
+      },
+      { wrapper: AppStateProvider },
+    );
+
+    act(() => {
+      capturedDispatch!({ type: 'SET_CONFIG', settings: mockSettings, profile: mockProfile });
+    });
+    rerender();
+
+    await act(async () => {
+      await i18n.changeLanguage('en');
+    });
+    changeLanguageSpy.mockClear();
+
+    act(() => {
+      capturedDispatch!({ type: 'UPDATE_SETTINGS', settings: { theme: 'dark' } });
+    });
+    rerender();
+
+    expect(changeLanguageSpy).not.toHaveBeenCalledWith('zh-CN');
+  });
+
   it('should not save when settings is null', () => {
     let capturedDispatch: ReturnType<typeof useDispatch>;
 

@@ -1,10 +1,9 @@
-import type { ChangeEvent, FocusEvent, ReactElement } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
+import type { ChangeEvent, ReactElement } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { AppLanguage } from '../../../shared/types';
-import { LANGUAGE_OPTIONS, normalizeLanguage } from '../../i18n';
+import { normalizeLanguage } from '../../i18n';
 import { useAppState, useDispatch } from '../../state/store';
 import { Modal } from '../common/Modal';
 
@@ -15,42 +14,28 @@ function normalizeI18nLanguage(language: string | undefined): AppLanguage {
   return 'en';
 }
 
-function resolveActiveLanguage(
-  configuredLanguage: AppLanguage | undefined,
-  resolvedLanguage: string | undefined,
-): AppLanguage {
-  return configuredLanguage
-    ? normalizeLanguage(configuredLanguage)
-    : normalizeI18nLanguage(resolvedLanguage);
-}
-
 export function OptionsModal(): ReactElement {
   const { i18n, t } = useTranslation();
   const state = useAppState();
   const dispatch = useDispatch();
-  const activeLanguage = resolveActiveLanguage(state.settings?.language, i18n.resolvedLanguage);
+  const currentLanguage = normalizeI18nLanguage(i18n.resolvedLanguage);
 
   const [launchOnStartup, setLaunchOnStartup] = useState(state.settings?.launchOnStartup ?? false);
   const [startInTray, setStartInTray] = useState(state.settings?.startInTray ?? false);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(
     state.settings?.theme ?? 'system',
   );
-  const [language, setLanguage] = useState<AppLanguage>(activeLanguage);
   const [customStyle, setCustomStyle] = useState<string>(state.settings?.customStyle ?? 'default');
   const [availableStyles, setAvailableStyles] = useState<string[]>([]);
-  const cleanupLanguageSelectRef = useRef<(() => void) | null>(null);
-  const lastCommittedLanguageRef = useRef<AppLanguage>(activeLanguage);
 
   useEffect(() => {
     if (state.settings) {
       setLaunchOnStartup(state.settings.launchOnStartup);
       setStartInTray(state.settings.startInTray);
       setTheme(state.settings.theme);
-      setLanguage(activeLanguage);
-      lastCommittedLanguageRef.current = activeLanguage;
       setCustomStyle(state.settings.customStyle);
     }
-  }, [activeLanguage, state.settings]);
+  }, [state.settings]);
 
   useEffect(() => {
     async function loadStyles() {
@@ -104,58 +89,21 @@ export function OptionsModal(): ReactElement {
   const commitLanguage = useCallback(
     (value: AppLanguage) => {
       const normalized = normalizeLanguage(value);
-      if (lastCommittedLanguageRef.current === normalized) {
+      if (currentLanguage === normalized) {
         return;
       }
-      lastCommittedLanguageRef.current = normalized;
 
-      flushSync(() => {
-        setLanguage(normalized);
+      if (state.settings?.language !== normalized) {
         dispatch({
           type: 'UPDATE_SETTINGS',
           settings: { language: normalized },
         });
-      });
-      void i18n.changeLanguage(normalized);
-    },
-    [dispatch, i18n],
-  );
-
-  const setLanguageSelectRef = useCallback(
-    (select: HTMLSelectElement | null) => {
-      cleanupLanguageSelectRef.current?.();
-      cleanupLanguageSelectRef.current = null;
-
-      if (!select) {
-        return;
       }
 
-      const handleNativeLanguageCommit = () => {
-        const nextLanguage = normalizeLanguage(select.value as AppLanguage);
-        commitLanguage(nextLanguage);
-        window.setTimeout(() => {
-          commitLanguage(nextLanguage);
-        }, 0);
-      };
-
-      select.addEventListener('input', handleNativeLanguageCommit);
-      select.addEventListener('change', handleNativeLanguageCommit);
-      select.addEventListener('blur', handleNativeLanguageCommit);
-      cleanupLanguageSelectRef.current = () => {
-        select.removeEventListener('input', handleNativeLanguageCommit);
-        select.removeEventListener('change', handleNativeLanguageCommit);
-        select.removeEventListener('blur', handleNativeLanguageCommit);
-      };
+      void i18n.changeLanguage(normalized);
     },
-    [commitLanguage],
+    [currentLanguage, dispatch, i18n, state.settings?.language],
   );
-
-  useEffect(() => {
-    return () => {
-      cleanupLanguageSelectRef.current?.();
-      cleanupLanguageSelectRef.current = null;
-    };
-  }, []);
 
   const handleCustomStyleChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
@@ -166,9 +114,7 @@ export function OptionsModal(): ReactElement {
     });
   };
 
-  const handleLanguageChange = (
-    e: ChangeEvent<HTMLSelectElement> | FocusEvent<HTMLSelectElement>,
-  ) => {
+  const handleLanguageChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const value = normalizeLanguage(e.currentTarget.value as AppLanguage);
     commitLanguage(value);
   };
@@ -200,19 +146,11 @@ export function OptionsModal(): ReactElement {
       <div className="modal-row">
         <label>{t('modals.options.language')}:</label>
         <select
-          ref={setLanguageSelectRef}
-          value={language}
-          onBlur={handleLanguageChange}
+          value={currentLanguage}
           onChange={handleLanguageChange}
-          onInput={handleLanguageChange}
         >
-          {LANGUAGE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.value === 'zh-CN'
-                ? t('modals.options.languageChineseSimplified')
-                : t('modals.options.languageEnglish')}
-            </option>
-          ))}
+          <option value="en">{t('modals.options.languageEnglish')}</option>
+          <option value="zh-CN">{t('modals.options.languageChineseSimplified')}</option>
         </select>
       </div>
 
