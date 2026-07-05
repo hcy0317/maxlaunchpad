@@ -49,6 +49,17 @@ describe('configStore legacy custom styles', () => {
     expect(loadCustomStyleContent('class')).toBeNull();
   });
 
+  it('copies the bundled modern style template into fresh config dirs', async () => {
+    const { listCustomStyles, loadCustomStyleContent, loadSettings } = await import('../configStore');
+
+    loadSettings();
+
+    const modernStylePath = path.join(tempConfigHome, 'MaxLaunchpad', 'styles', 'modern.css');
+    expect(fs.existsSync(modernStylePath)).toBe(true);
+    expect(listCustomStyles()).toEqual(expect.arrayContaining(['modern']));
+    expect(loadCustomStyleContent('modern')).toContain('--selected-background-color');
+  });
+
   it('migrates a stale class customStyle setting back to default', async () => {
     const settingsPath = path.join(tempConfigHome, 'MaxLaunchpad', 'settings.yaml');
     fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
