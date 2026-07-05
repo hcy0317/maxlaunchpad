@@ -55,9 +55,13 @@ describe('configStore legacy custom styles', () => {
     loadSettings();
 
     const modernStylePath = path.join(tempConfigHome, 'MaxLaunchpad', 'styles', 'modern.css');
+    const modernStyle = loadCustomStyleContent('modern');
     expect(fs.existsSync(modernStylePath)).toBe(true);
     expect(listCustomStyles()).toEqual(expect.arrayContaining(['modern']));
-    expect(loadCustomStyleContent('modern')).toContain('--selected-background-color');
+    expect(modernStyle).toContain('--ml-surface');
+    expect(modernStyle).toContain('.tabbed-keyboard-panel::after');
+    expect(modernStyle).toContain('.key-btn-icon-slot');
+    expect(modernStyle).toContain('.num-key-label');
   });
 
   it('migrates a stale class customStyle setting back to default', async () => {
