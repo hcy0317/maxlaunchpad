@@ -71,5 +71,6 @@ export interface AppSettings {
   language?: AppLanguage;
   customStyle: string; // Style name without ".css", default 'default'
   windowSize: WindowSize; // User-customized window size
+  windowScaleBasis?: WindowSize; // Display work area where windowSize and 1x UI scale were established
   hideElements: HideElements; // Hide elements configuration
 }

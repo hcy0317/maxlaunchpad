@@ -2,6 +2,9 @@ import {
   constrainWindowSizeToWorkArea,
   getCenteredWindowBounds,
   getCenteredWindowPosition,
+  getDisplayAwareWindowSize,
+  getDisplayScaleFactor,
+  getWindowSizeInScaleBasis,
   normalizeWindowSizeToWorkArea,
   shouldAllowWindowMovement,
   shouldAllowWindowResize,
@@ -43,6 +46,18 @@ describe('windowBehavior', () => {
     expect(
       constrainWindowSizeToWorkArea({ width: 300, height: 80 }, { width: 1280, height: 720 }),
     ).toEqual({ width: 480, height: 120 });
+  });
+
+  it('scales a window with the display work area and restores its basis size', () => {
+    const scaleBasis = { width: 3072, height: 1728 };
+    const targetWorkArea = { width: 1920, height: 1080 };
+    const basisSize = { width: 1378, height: 771 };
+
+    expect(getDisplayScaleFactor(scaleBasis, targetWorkArea)).toBe(0.625);
+
+    const displaySize = getDisplayAwareWindowSize(basisSize, scaleBasis, targetWorkArea);
+    expect(displaySize).toEqual({ width: 861, height: 482 });
+    expect(getWindowSizeInScaleBasis(displaySize, scaleBasis, targetWorkArea)).toEqual(basisSize);
   });
 
   it('resets work-area-filled locked sizes to the default window size', () => {

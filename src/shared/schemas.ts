@@ -81,6 +81,7 @@ export const AppSettingsSchema = z
     language: AppLanguageSchema.optional(),
     customStyle: z.string(),
     windowSize: WindowSizeSchema,
+    windowScaleBasis: WindowSizeSchema.optional(),
     hideElements: HideElementsSchema,
   })
   .strip();

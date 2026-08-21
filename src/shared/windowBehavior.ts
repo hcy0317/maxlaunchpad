@@ -50,6 +50,62 @@ export function constrainWindowSizeToWorkArea(
   };
 }
 
+export function getDisplayScaleFactor(
+  scaleBasis: Pick<WorkArea, 'width' | 'height'>,
+  targetWorkArea: Pick<WorkArea, 'width' | 'height'>,
+): number {
+  if (
+    !Number.isFinite(scaleBasis.width) ||
+    !Number.isFinite(scaleBasis.height) ||
+    !Number.isFinite(targetWorkArea.width) ||
+    !Number.isFinite(targetWorkArea.height) ||
+    scaleBasis.width <= 0 ||
+    scaleBasis.height <= 0 ||
+    targetWorkArea.width <= 0 ||
+    targetWorkArea.height <= 0
+  ) {
+    return 1;
+  }
+
+  return Math.min(
+    targetWorkArea.width / scaleBasis.width,
+    targetWorkArea.height / scaleBasis.height,
+  );
+}
+
+export function getDisplayAwareWindowSize(
+  size: WindowSize,
+  scaleBasis: Pick<WorkArea, 'width' | 'height'>,
+  targetWorkArea: Pick<WorkArea, 'width' | 'height'>,
+): WindowSize {
+  const basisSize = constrainWindowSizeToWorkArea(size, scaleBasis);
+  const scaleFactor = getDisplayScaleFactor(scaleBasis, targetWorkArea);
+
+  return constrainWindowSizeToWorkArea(
+    {
+      width: basisSize.width * scaleFactor,
+      height: basisSize.height * scaleFactor,
+    },
+    targetWorkArea,
+  );
+}
+
+export function getWindowSizeInScaleBasis(
+  size: WindowSize,
+  scaleBasis: Pick<WorkArea, 'width' | 'height'>,
+  currentWorkArea: Pick<WorkArea, 'width' | 'height'>,
+): WindowSize {
+  const scaleFactor = getDisplayScaleFactor(scaleBasis, currentWorkArea);
+
+  return constrainWindowSizeToWorkArea(
+    {
+      width: size.width / scaleFactor,
+      height: size.height / scaleFactor,
+    },
+    scaleBasis,
+  );
+}
+
 function isFiniteWindowSize(size: WindowSize | null | undefined): size is WindowSize {
   return Boolean(
     size &&
