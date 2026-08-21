@@ -55,7 +55,8 @@ export interface HideElements {
   row3: boolean; // Hide letter keys row 3 (Z-/)
 }
 
-export type AppLanguage = 'zh' | 'en';
+export type AppLanguage = 'en' | 'zh-CN';
+export type LegacyAppLanguage = AppLanguage | 'zh';
 
 // App settings (stored in settings.yaml)
 export interface AppSettings {
@@ -67,8 +68,9 @@ export interface AppSettings {
   launchOnStartup: boolean;
   startInTray: boolean;
   theme: 'light' | 'dark' | 'system';
-  language: AppLanguage;
+  language?: AppLanguage;
   customStyle: string; // Style name without ".css", default 'default'
   windowSize: WindowSize; // User-customized window size
+  windowScaleBasis?: WindowSize; // Display work area where windowSize and 1x UI scale were established
   hideElements: HideElements; // Hide elements configuration
 }

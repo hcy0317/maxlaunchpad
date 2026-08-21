@@ -1,4 +1,4 @@
-import type { AppLanguage, AppSettings } from './types';
+import type { AppLanguage, LegacyAppLanguage } from './types';
 
 interface TrayI18n {
   show: string;
@@ -6,7 +6,7 @@ interface TrayI18n {
 }
 
 const TRAY_TRANSLATIONS: Record<AppLanguage, TrayI18n> = {
-  zh: {
+  'zh-CN': {
     show: '显示',
     exit: '退出',
   },
@@ -16,10 +16,13 @@ const TRAY_TRANSLATIONS: Record<AppLanguage, TrayI18n> = {
   },
 };
 
-export function normalizeTrayLanguage(language: AppSettings['language'] | undefined): AppLanguage {
-  return language && language in TRAY_TRANSLATIONS ? language : 'zh';
+export function normalizeTrayLanguage(language: LegacyAppLanguage | undefined): AppLanguage {
+  if (language === 'zh' || language === 'zh-CN') {
+    return 'zh-CN';
+  }
+  return 'en';
 }
 
-export function getTrayI18n(language: AppSettings['language'] | undefined): TrayI18n {
+export function getTrayI18n(language: LegacyAppLanguage | undefined): TrayI18n {
   return TRAY_TRANSLATIONS[normalizeTrayLanguage(language)];
 }

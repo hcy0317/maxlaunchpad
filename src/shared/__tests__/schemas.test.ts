@@ -236,7 +236,7 @@ describe('AppSettingsSchema', () => {
     launchOnStartup: false,
     startInTray: true,
     theme: 'dark' as const,
-    language: 'zh' as const,
+    language: 'zh-CN' as const,
     customStyle: '.key { color: red; }',
     windowSize: { width: 1000, height: 600 },
     hideElements: { ...DEFAULT_HIDE_ELEMENTS },
@@ -247,6 +247,26 @@ describe('AppSettingsSchema', () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data).toEqual(validSettings);
+    }
+  });
+
+  it('should normalize legacy Chinese language settings', () => {
+    const result = AppSettingsSchema.safeParse({ ...validSettings, language: 'zh' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.language).toBe('zh-CN');
+    }
+  });
+
+  it('should allow omitted language to preserve renderer detection', () => {
+    const settingsWithoutLanguage = { ...validSettings };
+    delete (settingsWithoutLanguage as Record<string, unknown>).language;
+
+    const result = AppSettingsSchema.safeParse(settingsWithoutLanguage);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.language).toBeUndefined();
     }
   });
 
@@ -275,7 +295,6 @@ describe('AppSettingsSchema', () => {
       'launchOnStartup',
       'startInTray',
       'theme',
-      'language',
       'customStyle',
       'windowSize',
       'hideElements',

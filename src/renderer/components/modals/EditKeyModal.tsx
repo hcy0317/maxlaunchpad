@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { DEFAULT_FOLDER_ICON_URL } from '../../../shared/constants';
 import type { InstalledApp, KeyConfig } from '../../../shared/types';
 import { getBasename, getParentDirectory } from '../../../shared/utils';
-import { getI18n } from '../../i18n';
 import { IS_WINDOWS } from '../../platform';
-import { useAppState, useDispatch } from '../../state/store';
+import { useDispatch } from '../../state/store';
 import { Modal } from '../common/Modal';
 
 interface EditKeyModalProps {
@@ -13,10 +13,8 @@ interface EditKeyModalProps {
 }
 
 export function EditKeyModal({ keyConfig }: EditKeyModalProps) {
-  const state = useAppState();
+  const { t } = useTranslation();
   const dispatch = useDispatch();
-  const i18n = getI18n(state.settings?.language);
-  const text = i18n.editKey;
 
   const [label, setLabel] = useState(keyConfig.label);
   const [filePath, setFilePath] = useState(keyConfig.filePath);
@@ -121,14 +119,14 @@ export function EditKeyModal({ keyConfig }: EditKeyModalProps) {
   };
 
   const handleSelectFile = async () => {
-    const result = await window.electronAPI.selectFile(text.selectFile);
+    const result = await window.electronAPI.selectFile(t('modals.editKey.selectFile'));
     if (!result.canceled && result.filePath) {
       await applyPathSelection(result.filePath);
     }
   };
 
   const handleSelectFolder = async () => {
-    const result = await window.electronAPI.selectFolder(text.selectFolder);
+    const result = await window.electronAPI.selectFolder(t('modals.editKey.selectFolder'));
     if (!result.canceled && result.filePath) {
       await applyPathSelection(result.filePath, 'folder');
     }
@@ -154,9 +152,15 @@ export function EditKeyModal({ keyConfig }: EditKeyModalProps) {
   };
 
   return (
-    <Modal title={`${text.title}: ${keyConfig.tabId} / ${keyConfig.id}`} width={620}>
+    <Modal
+      title={t('modals.editKey.titleWithKey', {
+        tabId: keyConfig.tabId,
+        keyId: keyConfig.id,
+      })}
+      width={620}
+    >
       <div className="modal-row modal-row-quick-select">
-        <label>{text.quickSelect}</label>
+        <label>{t('modals.editKey.quickSelect')}</label>
         <div className="modal-field app-picker-field">
           <input
             type="text"
@@ -168,7 +172,7 @@ export function EditKeyModal({ keyConfig }: EditKeyModalProps) {
             onFocus={() => setShowAppDropdown(true)}
             onBlur={() => setTimeout(() => setShowAppDropdown(false), 200)}
             onKeyDown={handleKeyDown}
-            placeholder={text.quickSelectPlaceholder}
+            placeholder={t('modals.editKey.quickSelectPlaceholder')}
           />
           {showAppDropdown && filteredApps.length > 0 && (
             <div
@@ -202,90 +206,90 @@ export function EditKeyModal({ keyConfig }: EditKeyModalProps) {
         <span className="modal-row-label-spacer" aria-hidden="true" />
         <div className="file-picker-actions">
           <button type="button" onClick={() => void handleSelectFile()}>
-            {text.selectFile}
+            {t('modals.editKey.selectFile')}
           </button>
           <button type="button" onClick={() => void handleSelectFolder()}>
-            {text.selectFolder}
+            {t('modals.editKey.selectFolder')}
           </button>
         </div>
       </div>
 
       <div className="modal-row">
-        <label>{text.label}</label>
+        <label>{t('modals.editKey.labelRequired')}</label>
         <input
           type="text"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder={text.labelPlaceholder}
+          placeholder={t('modals.editKey.labelPlaceholder')}
           autoFocus
         />
       </div>
 
       <div className="modal-row modal-row-path">
-        <label>{text.path}</label>
+        <label>{t('modals.editKey.filePathRequired')}</label>
         <div className="path-picker">
           <input
             className="path-picker-input"
             type="text"
             value={filePath}
             onChange={(e) => setFilePath(e.target.value)}
-            placeholder={text.pathPlaceholder}
+            placeholder={t('modals.editKey.filePathPlaceholder')}
           />
         </div>
       </div>
 
       <div className="modal-row">
-        <label>{text.args}</label>
+        <label>{t('modals.editKey.arguments')}</label>
         <input
           type="text"
           value={args}
           onChange={(e) => setArgs(e.target.value)}
-          placeholder={text.argsPlaceholder}
+          placeholder={t('modals.editKey.argumentsPlaceholder')}
         />
       </div>
 
       <div className="modal-row">
-        <label>{text.workingDirectory}</label>
+        <label>{t('modals.editKey.workingDirectory')}</label>
         <input
           type="text"
           value={workingDirectory}
           onChange={(e) => setWorkingDirectory(e.target.value)}
-          placeholder={text.workingDirectoryPlaceholder}
+          placeholder={t('modals.editKey.workingDirectoryPlaceholder')}
         />
       </div>
 
       <div className="modal-row">
-        <label>{text.description}</label>
+        <label>{t('modals.editKey.description')}</label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder={text.descriptionPlaceholder}
+          placeholder={t('modals.editKey.descriptionPlaceholder')}
         />
       </div>
 
       {IS_WINDOWS && (
         <div className="modal-row">
-          <label>{text.runAsAdmin}</label>
+          <label>{t('modals.editKey.runAsAdmin')}</label>
           <input
             type="checkbox"
             checked={runAsAdmin}
             onChange={(e) => setRunAsAdmin(e.target.checked)}
           />
           <span style={{ opacity: 0.5, fontSize: '12px', marginLeft: '8px' }}>
-            {text.adminWarning}
+            {t('modals.editKey.runAsAdminWarning')}
           </span>
         </div>
       )}
 
       <div className="modal-row">
-        <label>{text.iconPath}</label>
+        <label>{t('modals.editKey.iconPath')}</label>
         <div className="path-picker icon-path-picker">
           <input
             className="path-picker-input"
             type="text"
             value={iconPath}
             onChange={(e) => setIconPath(e.target.value)}
-            placeholder={text.iconPlaceholder}
+            placeholder={t('modals.editKey.iconPathPlaceholder')}
           />
           <input
             ref={iconInputRef}
@@ -301,16 +305,18 @@ export function EditKeyModal({ keyConfig }: EditKeyModalProps) {
             }}
           />
           <button type="button" onClick={() => iconInputRef.current?.click()}>
-            {text.browse}
+            {t('modals.editKey.browse')}
           </button>
         </div>
       </div>
 
       <div className="modal-actions">
         <button onClick={handleSave} disabled={!label.trim() || !filePath.trim()}>
-          {i18n.common.save}
+          {t('modals.common.save')}
         </button>
-        <button onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>{i18n.common.cancel}</button>
+        <button onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>
+          {t('modals.common.cancel')}
+        </button>
       </div>
     </Modal>
   );

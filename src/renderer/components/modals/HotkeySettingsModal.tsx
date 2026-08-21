@@ -1,5 +1,6 @@
 import type { ChangeEvent, KeyboardEvent, ReactElement } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   CODE_TO_ACCELERATOR,
@@ -12,15 +13,14 @@ import {
 } from '../../../shared/constants';
 import type { MenuRevealKey } from '../../../shared/types';
 import { normalizeModifiers } from '../../../shared/utils';
-import { getI18n } from '../../i18n';
 import { IS_LINUX, IS_MAC } from '../../platform';
 import { useAppState, useDispatch } from '../../state/store';
 import { Modal } from '../common/Modal';
 
 export function HotkeySettingsModal(): ReactElement {
+  const { t } = useTranslation();
   const state = useAppState();
   const dispatch = useDispatch();
-  const i18n = getI18n(state.settings?.language);
 
   const modifierKeysWithLabels = useMemo(
     () =>
@@ -126,16 +126,17 @@ export function HotkeySettingsModal(): ReactElement {
     return def ? def.label : modifierId;
   };
 
-  const launchpadHotkeyText = `${modifiers.length > 0 ? `${modifiers.map(formatModifierLabel).join('+')}+` : ''}${mainKey}`;
+  const launchpadHotkeyText = `${
+    modifiers.length > 0 ? `${modifiers.map(formatModifierLabel).join('+')}+` : ''
+  }${mainKey}`;
 
   return (
-    <Modal title={i18n.hotkey.title}>
+    <Modal title={t('modals.hotkeySettings.title')}>
       <div className="modal-section">
-        <h3>{i18n.hotkey.launchpadSectionTitle}</h3>
+        <h3>{t('modals.hotkeySettings.launchpadSectionTitle')}</h3>
       </div>
-
       <div className="modal-row">
-        <label>{i18n.hotkey.modifierKeys}</label>
+        <label>{t('modals.hotkeySettings.modifierKeys')}:</label>
         <div className="modifier-keys">
           {modifierKeysWithLabels.map((mod) => (
             <label key={mod.id}>
@@ -151,15 +152,15 @@ export function HotkeySettingsModal(): ReactElement {
       </div>
 
       <div className="modal-row">
-        <label>{i18n.hotkey.key}</label>
+        <label>{t('modals.hotkeySettings.key')}:</label>
         <input
           type="text"
-          value={isRecording ? i18n.hotkey.pressAKey : mainKey}
+          value={isRecording ? t('modals.hotkeySettings.pressAKey') : mainKey}
           onFocus={() => setIsRecording(true)}
           onBlur={() => setIsRecording(false)}
           onKeyDown={handleKeyDown}
           readOnly
-          placeholder={i18n.hotkey.clickToRecord}
+          placeholder={t('modals.hotkeySettings.clickToRecord')}
           style={
             isRecording
               ? {
@@ -173,30 +174,32 @@ export function HotkeySettingsModal(): ReactElement {
       </div>
 
       <div className="modal-row">
-        <label>{i18n.hotkey.activeTabOnShow}</label>
+        <label>{t('modals.hotkeySettings.activeTab')}:</label>
         <select value={activeTabOnShow} onChange={handleActiveTabOnShowChange}>
-          <option value="lastUsed">{i18n.hotkey.lastUsed}</option>
+          <option value="lastUsed">{t('modals.hotkeySettings.lastUsed')}</option>
           {NUM_KEYS.map((key) => (
             <option key={key} value={key}>
-              {i18n.hotkey.tab} {key}
+              {t('modals.hotkeySettings.tabOption', { tabId: key })}
             </option>
           ))}
         </select>
       </div>
 
       <div className="modal-row modal-row-highlight">
-        <span style={{ fontWeight: 'bold' }}>{i18n.hotkey.currentLaunchpadHotkey}</span>
+        <span style={{ fontWeight: 'bold' }}>
+          {t('modals.hotkeySettings.currentLaunchpadHotkey')}
+        </span>
         <span style={{ fontFamily: 'monospace', fontSize: '1.1em' }}>
           {launchpadHotkeyText}
         </span>
       </div>
 
       <div className="modal-section">
-        <h3>{i18n.hotkey.menuRevealSectionTitle}</h3>
+        <h3>{t('modals.hotkeySettings.menuRevealSectionTitle')}</h3>
       </div>
 
       <div className="modal-row">
-        <label>{i18n.hotkey.menuRevealKey}</label>
+        <label>{t('modals.hotkeySettings.menuRevealKey')}:</label>
         <div className="modifier-keys">
           {MENU_REVEAL_KEYS.map((key) => (
             <label key={key}>
@@ -214,7 +217,9 @@ export function HotkeySettingsModal(): ReactElement {
       </div>
 
       <div className="modal-row modal-row-highlight">
-        <span style={{ fontWeight: 'bold' }}>{i18n.hotkey.currentMenuRevealKey}</span>
+        <span style={{ fontWeight: 'bold' }}>
+          {t('modals.hotkeySettings.currentMenuRevealKey')}
+        </span>
         <span style={{ fontFamily: 'monospace', fontSize: '1.1em' }}>
           {formatModifierLabel(menuRevealKey)}
         </span>
@@ -225,15 +230,19 @@ export function HotkeySettingsModal(): ReactElement {
         style={{ marginTop: '1em', fontSize: '0.85em', lineHeight: '1.5' }}
       >
         <p style={{ margin: 0 }}>
-          {i18n.hotkey.recommendation}
+          {t('modals.hotkeySettings.recommendation')}
           {IS_LINUX && (
-            <span style={{ display: 'block', marginTop: '0.5em' }}>{i18n.hotkey.linuxNote}</span>
+            <span style={{ display: 'block', marginTop: '0.5em' }}>
+              {t('modals.hotkeySettings.linuxGlobalHotkeyNote')}
+            </span>
           )}
         </p>
       </div>
 
       <div className="modal-actions">
-        <button onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>{i18n.common.close}</button>
+        <button onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>
+          {t('modals.common.close')}
+        </button>
       </div>
     </Modal>
   );

@@ -27,7 +27,7 @@ export function NumButton({
   useEffect(() => () => cleanupMoveRef.current(), []);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (e.button !== 0 || isHidden || !onMoveTab) return;
+    if (e.button > 0 || isHidden || !onMoveTab) return;
     const moveTab: NonNullable<typeof onMoveTab> = onMoveTab;
 
     const button = e.currentTarget;
@@ -35,6 +35,7 @@ export function NumButton({
     const startX = e.clientX;
     const startY = e.clientY;
     let moving = false;
+    let pointerMovedBeyondClickThreshold = false;
     let currentTarget: HTMLElement | null = null;
 
     const clearTarget = () => {
@@ -70,6 +71,8 @@ export function NumButton({
     function handlePointerMove(event: PointerEvent) {
       if (!moving) {
         if (Math.hypot(event.clientX - startX, event.clientY - startY) > 8) {
+          pointerMovedBeyondClickThreshold = true;
+          suppressClickRef.current = true;
           if (longPressTimerRef.current !== null) {
             window.clearTimeout(longPressTimerRef.current);
             longPressTimerRef.current = null;
@@ -96,6 +99,11 @@ export function NumButton({
         if (targetTabId) {
           moveTab(sourceTabId, targetTabId);
         }
+        window.setTimeout(() => {
+          suppressClickRef.current = false;
+        }, 0);
+      } else if (pointerMovedBeyondClickThreshold) {
+        event.preventDefault();
         window.setTimeout(() => {
           suppressClickRef.current = false;
         }, 0);

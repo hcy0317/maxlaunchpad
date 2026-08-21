@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { act, type ComponentProps } from 'react';
+import type { ComponentProps } from 'react';
 
 import type { KeyConfig } from '../../../../shared/types';
 import { AppStateProvider } from '../../../state/store';
@@ -10,6 +10,14 @@ let mockIconDataUrl: string | null = null;
 jest.mock('../../../hooks/useIcon', () => ({
   useIcon: () => mockIconDataUrl,
 }));
+
+function dispatchPointerEvent(
+  target: Document | Element | Window,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  init: MouseEventInit,
+) {
+  fireEvent(target, new MouseEvent(type, { bubbles: true, cancelable: true, ...init }));
+}
 
 function renderKeyButton(overrides: Partial<ComponentProps<typeof KeyButton>> = {}) {
   const keyConfig: KeyConfig = {
@@ -44,41 +52,45 @@ function renderKeyButton(overrides: Partial<ComponentProps<typeof KeyButton>> = 
 
 describe('KeyButton', () => {
   beforeEach(() => {
-    jest.useFakeTimers();
     mockIconDataUrl = null;
   });
 
   afterEach(() => {
-    jest.runOnlyPendingTimers();
-    jest.useRealTimers();
+    jest.restoreAllMocks();
   });
 
-  it('keeps single click launch delayed only long enough to distinguish double click', () => {
+  it('launches immediately on single click', () => {
     const { button, onClick, onEdit } = renderKeyButton();
 
     fireEvent.click(button, { detail: 1 });
-    expect(onClick).not.toHaveBeenCalled();
-
-    act(() => {
-      jest.advanceTimersByTime(220);
-    });
 
     expect(onClick).toHaveBeenCalledTimes(1);
     expect(onEdit).not.toHaveBeenCalled();
   });
 
-  it('opens editing on double click and cancels the pending launch click', () => {
+  it('suppresses launch after movement cancels a pending key move', () => {
+    const onMoveKey = jest.fn();
+    const { button, onClick } = renderKeyButton({ onMoveKey });
+
+    dispatchPointerEvent(button, 'pointerdown', { button: 0, clientX: 0, clientY: 0 });
+    dispatchPointerEvent(document, 'pointermove', { clientX: 16, clientY: 0 });
+    dispatchPointerEvent(document, 'pointerup', { clientX: 16, clientY: 0 });
+    fireEvent.click(button, { detail: 1 });
+
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onMoveKey).not.toHaveBeenCalled();
+  });
+
+  it('opens editing on double click without scheduling delayed launch work', () => {
+    const setTimeoutSpy = jest.spyOn(window, 'setTimeout');
     const { button, onClick, onEdit } = renderKeyButton();
 
     fireEvent.click(button, { detail: 1 });
     fireEvent.doubleClick(button, { detail: 2 });
 
-    act(() => {
-      jest.advanceTimersByTime(220);
-    });
-
     expect(onEdit).toHaveBeenCalledTimes(1);
-    expect(onClick).not.toHaveBeenCalled();
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
   });
 
   it('marks text-only layout when button icons are hidden', () => {

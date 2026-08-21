@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { getI18n } from '../../i18n';
 import { selectTabLabel } from '../../state/selectors';
 import { useAppState, useDispatch } from '../../state/store';
 import { Modal } from '../common/Modal';
@@ -10,9 +10,9 @@ interface EditTabModalProps {
 }
 
 export function EditTabModal({ tabId }: EditTabModalProps) {
+  const { t } = useTranslation();
   const state = useAppState();
   const dispatch = useDispatch();
-  const i18n = getI18n(state.settings?.language);
 
   const currentLabel = selectTabLabel(state, tabId) ?? '';
   const [label, setLabel] = useState(currentLabel);
@@ -29,22 +29,24 @@ export function EditTabModal({ tabId }: EditTabModalProps) {
   };
 
   return (
-    <Modal title={`${i18n.editTab.title}: ${tabId}`} width={400}>
+    <Modal title={t('modals.editTab.titleWithTab', { tabId })} width={400}>
       <div className="modal-row">
-        <label>{i18n.editTab.tabLabel}</label>
+        <label>{t('modals.editTab.tabLabel')}</label>
         <input
           type="text"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={i18n.editTab.tabLabelPlaceholder}
+          placeholder={t('modals.editTab.tabDisplayName')}
           autoFocus
         />
       </div>
 
       <div className="modal-actions">
-        <button onClick={handleSave}>{i18n.common.save}</button>
-        <button onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>{i18n.common.cancel}</button>
+        <button onClick={handleSave}>{t('modals.common.save')}</button>
+        <button onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>
+          {t('modals.common.cancel')}
+        </button>
       </div>
     </Modal>
   );

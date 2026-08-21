@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 
 import { DEFAULT_HIDE_ELEMENTS } from '../../../../shared/constants';
 import type { AppSettings, KeyboardProfile } from '../../../../shared/types';
+import i18n from '../../../i18n';
 import { HotkeySettingsModal } from '../HotkeySettingsModal';
 
 const dispatchMock = jest.fn();
@@ -15,7 +16,7 @@ const settings: AppSettings = {
   launchOnStartup: true,
   startInTray: false,
   theme: 'dark',
-  language: 'zh',
+  language: 'zh-CN',
   customStyle: 'modern',
   windowSize: { width: 1000, height: 600 },
   hideElements: { ...DEFAULT_HIDE_ELEMENTS },
@@ -36,6 +37,7 @@ jest.mock('../../../state/store', () => ({
       isDragDropMode: false,
       isMenuRevealKeyPressed: false,
       isConfigDirty: false,
+      configRevision: 0,
       isLoading: false,
       error: null,
       modal: { type: 'hotkey-settings' },
@@ -48,7 +50,8 @@ jest.mock('../../../state/store', () => ({
 describe('HotkeySettingsModal', () => {
   beforeEach(() => {
     dispatchMock.mockClear();
-    settings.language = 'zh';
+    settings.language = 'zh-CN';
+    void i18n.changeLanguage('zh-CN');
     settings.hotkey = { modifiers: ['Alt'], key: '`' };
     settings.menuRevealKey = 'Alt';
     window.electronAPI = {
@@ -72,7 +75,12 @@ describe('HotkeySettingsModal', () => {
   it('limits the menu reveal key choices to modifiers and saves the selected key', () => {
     render(<HotkeySettingsModal />);
 
-    const revealSection = screen.getByText('临时显示隐藏菜单：').closest('.modal-row');
+    const revealLabel = screen.getByText(
+      (_, element) =>
+        element?.tagName.toLowerCase() === 'label' &&
+        element.textContent?.trim() === '临时显示隐藏菜单:',
+    );
+    const revealSection = revealLabel.closest('.modal-row');
     const radioLabels = Array.from(revealSection!.querySelectorAll('.modifier-keys label')).map(
       (label) => label.textContent?.trim(),
     );

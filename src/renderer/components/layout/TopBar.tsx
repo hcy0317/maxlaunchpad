@@ -1,16 +1,11 @@
 import type { ReactElement } from 'react';
 import { useCallback, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import {
-  APP_NAME,
-  DEFAULT_MENU_REVEAL_KEY,
-  DOCUMENTATION_URL,
-  MODIFIER_KEYS,
-} from '../../../shared/constants';
+import { APP_NAME, DOCUMENTATION_URL } from '../../../shared/constants';
 import type { HideElements, KeyboardProfile } from '../../../shared/types';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { useCloseOnWindowHide } from '../../hooks/useCloseOnWindowHide';
-import { getI18n } from '../../i18n';
 import { IS_MAC, IS_WINDOWS } from '../../platform';
 import { useAppState, useDispatch } from '../../state/store';
 import { SearchBox } from './SearchBox';
@@ -18,6 +13,7 @@ import { SearchBox } from './SearchBox';
 type MenuId = 'file' | 'view' | 'tools' | 'settings' | 'help' | null;
 
 export function TopBar(): ReactElement {
+  const { t } = useTranslation();
   const state = useAppState();
   const dispatch = useDispatch();
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
@@ -27,17 +23,9 @@ export function TopBar(): ReactElement {
   // After loading, settings is guaranteed to be non-null
   const settings = state.settings!;
   const hideElements = settings.hideElements;
-  const i18n = getI18n(settings.language);
-  const t = i18n.topBar;
 
   // Determine if menu items should be visible
   const isMenuHidden = hideElements.menu;
-  const menuRevealKey = settings.menuRevealKey ?? DEFAULT_MENU_REVEAL_KEY;
-  const menuRevealKeyLabel =
-    (MODIFIER_KEYS.find((mod) => mod.id === menuRevealKey)?.[IS_MAC ? 'macLabel' : 'winLabel'] ??
-      menuRevealKey);
-  const hideMenuLabel = t.hideMenu.replace('{key}', menuRevealKeyLabel);
-  const hideMenuTitle = t.hideMenuTitle.replace('{key}', menuRevealKeyLabel);
   const shouldShowMenuItems =
     !isMenuHidden || state.ui.isMenuRevealKeyPressed || openMenu !== null;
 
@@ -63,12 +51,13 @@ export function TopBar(): ReactElement {
       return;
     }
 
+    const configRevision = state.ui.configRevision;
     try {
       await window.electronAPI.saveSettings(state.settings);
       await window.electronAPI.saveProfile(state.profile, state.settings.activeProfilePath);
-      dispatch({ type: 'SET_CONFIG_DIRTY', dirty: false });
+      dispatch({ type: 'SET_CONFIG_DIRTY', dirty: false, revision: configRevision });
     } catch (error) {
-      dispatch({ type: 'SET_ERROR', error: i18n.errors.saveConfigurationFailed });
+      dispatch({ type: 'SET_ERROR', error: t('errors.failedToSaveConfiguration') });
       throw error;
     }
   };
@@ -82,7 +71,7 @@ export function TopBar(): ReactElement {
     try {
       await flushCurrentConfig();
 
-      const result = await window.electronAPI.saveAsDialog(t.saveProfileDialogTitle);
+      const result = await window.electronAPI.saveAsDialog();
       if (result.canceled || !result.filePath) {
         return;
       }
@@ -103,7 +92,7 @@ export function TopBar(): ReactElement {
         profile,
       });
     } catch {
-      dispatch({ type: 'SET_ERROR', error: i18n.errors.createProfileFailed });
+      dispatch({ type: 'SET_ERROR', error: t('errors.failedToCreateNewProfile') });
     }
   };
 
@@ -116,7 +105,7 @@ export function TopBar(): ReactElement {
     try {
       await flushCurrentConfig();
 
-      const result = await window.electronAPI.openProfileDialog(t.openProfileDialogTitle);
+      const result = await window.electronAPI.openProfileDialog();
       if (result.canceled || !result.filePath) {
         return;
       }
@@ -130,7 +119,7 @@ export function TopBar(): ReactElement {
       const { settings, profile } = await window.electronAPI.loadConfig();
       dispatch({ type: 'SET_CONFIG', settings, profile });
     } catch {
-      dispatch({ type: 'SET_ERROR', error: i18n.errors.openProfileFailed });
+      dispatch({ type: 'SET_ERROR', error: t('errors.failedToOpenProfile') });
     }
   };
 
@@ -143,7 +132,7 @@ export function TopBar(): ReactElement {
     try {
       await flushCurrentConfig();
 
-      const result = await window.electronAPI.saveAsDialog(t.saveProfileDialogTitle);
+      const result = await window.electronAPI.saveAsDialog();
       if (result.canceled || !result.filePath) {
         return;
       }
@@ -164,7 +153,7 @@ export function TopBar(): ReactElement {
     } catch {
       dispatch({
         type: 'SET_ERROR',
-        error: i18n.errors.saveProfileAsFailed,
+        error: t('errors.failedToSaveProfileAs'),
       });
     }
   };
@@ -184,24 +173,28 @@ export function TopBar(): ReactElement {
     void window.electronAPI.hideWindow();
   };
 
-  const handleSelectDragDrop = () => {
+  const handleToggleDragDrop = () => {
     closeMenu();
-    dispatch({ type: 'SET_DRAG_DROP_MODE', enabled: true });
-    dispatch({
-      type: 'UPDATE_SETTINGS',
-      settings: { lockWindowCenter: false },
-    });
-    void window.electronAPI.setDragDropMode(true);
+    const enabled = !state.ui.isDragDropMode;
+    if (enabled && state.settings?.lockWindowCenter) {
+      void window.electronAPI.setLockWindowCenter(false);
+    }
+    dispatch({ type: 'SET_DRAG_DROP_MODE', enabled });
+    void window.electronAPI.setDragDropMode(enabled);
   };
 
-  const handleSelectLockCenter = () => {
+  const handleToggleLockCenter = () => {
     closeMenu();
-    dispatch({ type: 'SET_DRAG_DROP_MODE', enabled: false });
+    const enabled = !state.settings?.lockWindowCenter;
+    if (enabled && state.ui.isDragDropMode) {
+      dispatch({ type: 'SET_DRAG_DROP_MODE', enabled: false });
+      void window.electronAPI.setDragDropMode(false);
+    }
     dispatch({
       type: 'UPDATE_SETTINGS',
-      settings: { lockWindowCenter: true },
+      settings: { lockWindowCenter: enabled },
     });
-    void window.electronAPI.setLockWindowCenter(true);
+    void window.electronAPI.setLockWindowCenter(enabled);
   };
 
   const handleOpenUserApplicationsFolder = () => {
@@ -289,21 +282,21 @@ export function TopBar(): ReactElement {
           onClick={() => handleMenuClick('file')}
           onMouseEnter={() => handleMenuHover('file')}
         >
-          {t.file}
+          {t('menu.file')}
           {openMenu === 'file' && (
             <div className="dropdown-menu">
               <div className="dropdown-item" onClick={handleNew}>
-                {t.new}
+                {t('menu.new')}
               </div>
               <div className="dropdown-item" onClick={handleOpen}>
-                {t.open}
+                {t('menu.open')}
               </div>
               <div className="dropdown-item" onClick={handleSaveAs}>
-                {t.saveAs}
+                {t('menu.saveAs')}
               </div>
               <div className="context-menu-separator" />
               <div className="dropdown-item" onClick={handleExit}>
-                {t.exit}
+                {t('menu.exit')}
               </div>
             </div>
           )}
@@ -315,20 +308,24 @@ export function TopBar(): ReactElement {
           onClick={() => handleMenuClick('view')}
           onMouseEnter={() => handleMenuHover('view')}
         >
-          {t.view}
+          {t('menu.view')}
           {openMenu === 'view' && (
             <div className="dropdown-menu">
-              <div className="dropdown-item" onClick={handleSelectDragDrop} title={t.dragDropTitle}>
+              <div
+                className="dropdown-item"
+                onClick={handleToggleDragDrop}
+                title={t('menu.dragDropModeTooltip')}
+              >
                 <span className="menu-check">{state.ui.isDragDropMode ? '✓' : ''}</span>
-                {t.dragDropMode}
+                {t('menu.dragDropMode')}
               </div>
               <div
                 className="dropdown-item"
-                onClick={handleSelectLockCenter}
-                title={t.lockCenterTitle}
+                onClick={handleToggleLockCenter}
+                title={t('menu.centerWindowTooltip')}
               >
                 <span className="menu-check">{state.settings?.lockWindowCenter ? '✓' : ''}</span>
-                {t.lockWindowCenter}
+                {t('menu.centerWindow')}
               </div>
               <div className="context-menu-separator" />
               {/* Hide Elements submenu */}
@@ -338,74 +335,74 @@ export function TopBar(): ReactElement {
                 onMouseLeave={() => setHideSubmenuOpen(false)}
               >
                 <span className="menu-check"></span>
-                {t.hideElements}
+                {t('menu.hideElements')}
                 <span className="submenu-arrow">▸</span>
                 {hideSubmenuOpen && (
                   <div className="dropdown-menu submenu">
                     <div
                       className="dropdown-item"
                       onClick={() => handleToggleHideElement('menu')}
-                      title={hideMenuTitle}
+                      title={t('menu.hideMenuBarTooltip', { key: settings.menuRevealKey })}
                     >
                       <span className="menu-check">{hideElements.menu ? '✓' : ''}</span>
-                      {hideMenuLabel}
+                      {t('menu.hideMenuBar', { key: settings.menuRevealKey })}
                     </div>
                     <div
                       className="dropdown-item"
                       onClick={() => handleToggleHideElement('buttonIcons')}
-                      title={t.buttonIconsTitle}
+                      title={t('menu.hideButtonIconsTooltip')}
                     >
                       <span className="menu-check">{hideElements.buttonIcons ? '✓' : ''}</span>
-                      {t.buttonIcons}
+                      {t('menu.hideButtonIcons')}
                     </div>
                     <div
                       className="dropdown-item"
                       onClick={() => handleToggleHideElement('buttonText')}
-                      title={t.buttonTextTitle}
+                      title={t('menu.hideButtonTextTooltip')}
                     >
                       <span className="menu-check">{hideElements.buttonText ? '✓' : ''}</span>
-                      {t.buttonText}
+                      {t('menu.hideButtonText')}
                     </div>
                     <div
                       className="dropdown-item"
                       onClick={() => handleToggleHideElement('emptyButtons')}
-                      title={t.emptyButtonsTitle}
+                      title={t('menu.hideEmptyButtonsTooltip')}
                     >
                       <span className="menu-check">{hideElements.emptyButtons ? '✓' : ''}</span>
-                      {t.emptyButtons}
+                      {t('menu.hideEmptyButtons')}
                     </div>
                     <div className="context-menu-separator" />
                     <div
                       className="dropdown-item"
                       onClick={() => handleToggleHideElement('rowF')}
-                      title={t.rowFTitle}
+                      title={t('menu.hideFunctionKeysTooltip')}
                     >
                       <span className="menu-check">{hideElements.rowF ? '✓' : ''}</span>
-                      {t.rowF}
+                      {t('menu.hideFunctionKeys')}
                     </div>
                     <div
                       className="dropdown-item"
                       onClick={() => handleToggleHideElement('row1')}
-                      title={t.row1Title}
+                      title={t('menu.hideLetterKeysRow1Tooltip')}
                     >
                       <span className="menu-check">{hideElements.row1 ? '✓' : ''}</span>
-                      {t.row1}
+                      {t('menu.hideLetterKeysRow1')}
                     </div>
                     <div
                       className="dropdown-item"
                       onClick={() => handleToggleHideElement('row2')}
-                      title={t.row2Title}
+                      title={t('menu.hideLetterKeysRow2Tooltip')}
                     >
                       <span className="menu-check">{hideElements.row2 ? '✓' : ''}</span>
-                      {t.row2}
+                      {t('menu.hideLetterKeysRow2')}
                     </div>
                     <div
                       className="dropdown-item"
                       onClick={() => handleToggleHideElement('row3')}
-                      title={t.row3Title}
+                      title={t('menu.hideLetterKeysRow3Tooltip')}
                     >
                       <span className="menu-check">{hideElements.row3 ? '✓' : ''}</span>
-                      {t.row3}
+                      {t('menu.hideLetterKeysRow3')}
                     </div>
                   </div>
                 )}
@@ -420,23 +417,23 @@ export function TopBar(): ReactElement {
           onClick={() => handleMenuClick('tools')}
           onMouseEnter={() => handleMenuHover('tools')}
         >
-          {t.tools}
+          {t('menu.tools')}
           {openMenu === 'tools' && (
             <div className="dropdown-menu">
               {(() => {
                 const labels = IS_MAC
                   ? {
-                      user: t.openApplicationsFolderUser,
-                      system: t.openApplicationsFolderSystem,
+                      user: t('menu.openUserApps'),
+                      system: t('menu.openSystemApps'),
                     }
                   : IS_WINDOWS
                     ? {
-                        user: t.openStartMenuUser,
-                        system: t.openStartMenuSystem,
+                        user: t('menu.openStartMenuUser'),
+                        system: t('menu.openStartMenuAll'),
                       }
                     : {
-                        user: t.openApplicationsDirectoryUser,
-                        system: t.openApplicationsDirectorySystem,
+                        user: t('menu.openUserAppsDir'),
+                        system: t('menu.openSystemAppsDir'),
                       };
                 return (
                   <>
@@ -451,7 +448,7 @@ export function TopBar(): ReactElement {
               })()}
               <div className="context-menu-separator" />
               <div className="dropdown-item" onClick={handleOpenMyConfigFolders}>
-                {t.openConfigFolders}
+                {t('menu.openConfigFolders')}
               </div>
             </div>
           )}
@@ -463,14 +460,14 @@ export function TopBar(): ReactElement {
           onClick={() => handleMenuClick('settings')}
           onMouseEnter={() => handleMenuHover('settings')}
         >
-          {t.settings}
+          {t('menu.settings')}
           {openMenu === 'settings' && (
             <div className="dropdown-menu">
               <div className="dropdown-item" onClick={handleHotkey}>
-                {t.hotkey}
+                {t('menu.hotkeySettings')}
               </div>
               <div className="dropdown-item" onClick={handleOptions}>
-                {t.options}
+                {t('menu.options')}
               </div>
             </div>
           )}
@@ -482,14 +479,14 @@ export function TopBar(): ReactElement {
           onClick={() => handleMenuClick('help')}
           onMouseEnter={() => handleMenuHover('help')}
         >
-          {t.help}
+          {t('menu.help')}
           {openMenu === 'help' && (
             <div className="dropdown-menu">
               <div className="dropdown-item" onClick={handleDocumentation}>
-                {t.documentation}
+                {t('menu.documentation')}
               </div>
               <div className="dropdown-item" onClick={handleAbout}>
-                {t.about} {APP_NAME}
+                {t('menu.about')} {APP_NAME}
               </div>
             </div>
           )}
@@ -502,8 +499,8 @@ export function TopBar(): ReactElement {
         <button
           type="button"
           className="window-control minimize"
-          aria-label={t.minimizeWindow}
-          title={t.minimizeWindow}
+          aria-label={t('menu.minimizeWindow')}
+          title={t('menu.minimizeWindow')}
           onClick={handleMinimizeWindow}
         >
           <span aria-hidden="true">-</span>
@@ -511,11 +508,11 @@ export function TopBar(): ReactElement {
         <button
           type="button"
           className="window-control close"
-          aria-label={t.closeWindow}
-          title={t.closeWindow}
+          aria-label={t('menu.closeWindow')}
+          title={t('menu.closeWindow')}
           onClick={handleCloseWindow}
         >
-          <span aria-hidden="true">×</span>
+          <span aria-hidden="true">&times;</span>
         </button>
       </div>
     </div>

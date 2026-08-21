@@ -1,4 +1,6 @@
 const browserWindowMock = jest.fn();
+const loadSettingsMock = jest.fn();
+const saveSettingsMock = jest.fn();
 const getCursorScreenPointMock = jest.fn(() => ({ x: 5000, y: 100 }));
 const getDisplayNearestPointMock = jest.fn(() => ({
   id: 2,
@@ -10,6 +12,13 @@ const getPrimaryDisplayMock = jest.fn(() => ({
   scaleFactor: 1,
   workArea: { x: 4000, y: 0, width: 1920, height: 1080 },
 }));
+const getDisplayMatchingMock = jest.fn(() => ({
+  id: 2,
+  scaleFactor: 1.5,
+  workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+}));
+const screenOnMock = jest.fn();
+const screenOffMock = jest.fn();
 const loadUrlMock = jest.fn();
 const onMock = jest.fn();
 const setMovableMock = jest.fn();
@@ -30,6 +39,7 @@ const hideMock = jest.fn();
 const showMock = jest.fn();
 const unmaximizeMock = jest.fn();
 const webContentsSendMock = jest.fn();
+const webContentsSetZoomFactorMock = jest.fn();
 
 jest.mock('electron', () => ({
   app: {
@@ -39,19 +49,16 @@ jest.mock('electron', () => ({
   screen: {
     getCursorScreenPoint: getCursorScreenPointMock,
     getDisplayNearestPoint: getDisplayNearestPointMock,
+    getDisplayMatching: getDisplayMatchingMock,
     getPrimaryDisplay: getPrimaryDisplayMock,
+    on: screenOnMock,
+    off: screenOffMock,
   },
 }));
 
 jest.mock('../configStore', () => ({
-  loadSettings: jest.fn(() => ({
-    windowSize: {
-      width: 720,
-      height: 480,
-    },
-    lockWindowCenter: true,
-  })),
-  saveSettings: jest.fn(),
+  loadSettings: loadSettingsMock,
+  saveSettings: saveSettingsMock,
 }));
 
 jest.mock('../logger', () => ({
@@ -68,9 +75,14 @@ describe('createMainWindow', () => {
       globalThis as typeof globalThis & { MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string }
     ).MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY = 'app://preload';
     browserWindowMock.mockClear();
+    loadSettingsMock.mockReset();
+    saveSettingsMock.mockClear();
     getCursorScreenPointMock.mockClear();
     getDisplayNearestPointMock.mockClear();
+    getDisplayMatchingMock.mockClear();
     getPrimaryDisplayMock.mockClear();
+    screenOnMock.mockClear();
+    screenOffMock.mockClear();
     getCursorScreenPointMock.mockReturnValue({ x: 5000, y: 100 });
     getDisplayNearestPointMock.mockReturnValue({
       id: 2,
@@ -82,6 +94,11 @@ describe('createMainWindow', () => {
       scaleFactor: 1,
       workArea: { x: 4000, y: 0, width: 1920, height: 1080 },
     });
+    getDisplayMatchingMock.mockReturnValue({
+      id: 2,
+      scaleFactor: 1.5,
+      workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+    });
     loadUrlMock.mockClear();
     onMock.mockClear();
     setMovableMock.mockClear();
@@ -91,8 +108,10 @@ describe('createMainWindow', () => {
     isDestroyedMock.mockClear();
     centerMock.mockClear();
     focusMock.mockClear();
-    getBoundsMock.mockClear();
-    getSizeMock.mockClear();
+    getBoundsMock.mockReset();
+    getBoundsMock.mockReturnValue({ x: 120, y: 140, width: 720, height: 480 });
+    getSizeMock.mockReset();
+    getSizeMock.mockReturnValue([720, 480]);
     isFullScreenMock.mockClear();
     isMaximizedMock.mockClear();
     setBoundsMock.mockClear();
@@ -102,7 +121,15 @@ describe('createMainWindow', () => {
     showMock.mockClear();
     unmaximizeMock.mockClear();
     webContentsSendMock.mockClear();
+    webContentsSetZoomFactorMock.mockClear();
     isDestroyedMock.mockReturnValue(false);
+    loadSettingsMock.mockReturnValue({
+      windowSize: {
+        width: 720,
+        height: 480,
+      },
+      lockWindowCenter: true,
+    });
     browserWindowMock.mockImplementation(function BrowserWindow(this: unknown, options: unknown) {
       return {
         options,
@@ -128,9 +155,17 @@ describe('createMainWindow', () => {
         webContents: {
           isDestroyed: jest.fn(() => false),
           send: webContentsSendMock,
+          setZoomFactor: webContentsSetZoomFactorMock,
         },
       };
     });
+  });
+
+  afterEach(() => {
+    const closedHandler = onMock.mock.calls.find(([eventName]) => eventName === 'closed')?.[1] as
+      | (() => void)
+      | undefined;
+    closedHandler?.();
   });
 
   it('uses the custom app chrome instead of the native window frame', async () => {
@@ -183,6 +218,158 @@ describe('createMainWindow', () => {
     });
   });
 
+  it('opens the window and renderer at the saved display-work-area proportion', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSize: { width: 1000, height: 600 },
+      windowScaleBasis: { width: 3072, height: 1728 },
+      lockWindowCenter: true,
+    });
+    const { createMainWindow } = await import('../window');
+
+    createMainWindow();
+
+    expect(browserWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        width: 625,
+        height: 375,
+        webPreferences: expect.objectContaining({ zoomFactor: 0.625 }),
+      }),
+    );
+  });
+
+  it('repairs an invalid display scale basis without changing the current layout', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSize: { width: 720, height: 480 },
+      windowScaleBasis: { width: 0, height: Number.NaN },
+      lockWindowCenter: true,
+    });
+    const { createMainWindow } = await import('../window');
+
+    createMainWindow();
+
+    expect(browserWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        width: 720,
+        height: 480,
+        webPreferences: expect.objectContaining({ zoomFactor: 1 }),
+      }),
+    );
+    expect(saveSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        windowSize: { width: 720, height: 480 },
+        windowScaleBasis: { width: 1920, height: 1080 },
+      }),
+    );
+  });
+
+  it('reapplies the saved display proportion whenever a locked window is shown', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSize: { width: 1378, height: 771 },
+      windowScaleBasis: { width: 3072, height: 1728 },
+      lockWindowCenter: true,
+    });
+    const { createMainWindow, showMainWindow } = await import('../window');
+
+    createMainWindow();
+    showMainWindow();
+
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.625);
+    expect(setBoundsMock).toHaveBeenLastCalledWith({
+      x: 530,
+      y: 299,
+      width: 861,
+      height: 482,
+    });
+  });
+
+  it('restores the original layout after a display metrics round trip', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSize: { width: 1378, height: 771 },
+      windowScaleBasis: { width: 3072, height: 1728 },
+      lockWindowCenter: true,
+    });
+    getDisplayNearestPointMock.mockReturnValue({
+      id: 2,
+      scaleFactor: 1.25,
+      workArea: { x: 0, y: 0, width: 3072, height: 1728 },
+    });
+    getDisplayMatchingMock.mockReturnValue({
+      id: 2,
+      scaleFactor: 1.25,
+      workArea: { x: 0, y: 0, width: 3072, height: 1728 },
+    });
+    getSizeMock.mockReturnValue([1378, 771]);
+    const { createMainWindow } = await import('../window');
+
+    createMainWindow();
+    const metricsHandler = screenOnMock.mock.calls.find(
+      ([eventName]) => eventName === 'display-metrics-changed',
+    )?.[1] as ((event: unknown, display: unknown, changedMetrics: string[]) => void) | undefined;
+    expect(metricsHandler).toBeDefined();
+
+    metricsHandler!({}, { id: 2, workArea: { x: 0, y: 0, width: 1920, height: 1080 } }, [
+      'bounds',
+      'workArea',
+      'scaleFactor',
+    ]);
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.625);
+    expect(setBoundsMock).toHaveBeenLastCalledWith({
+      x: 530,
+      y: 299,
+      width: 861,
+      height: 482,
+    });
+
+    metricsHandler!({}, { id: 2, workArea: { x: 0, y: 0, width: 3072, height: 1728 } }, [
+      'bounds',
+      'workArea',
+      'scaleFactor',
+    ]);
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(1);
+    expect(setBoundsMock).toHaveBeenLastCalledWith({
+      x: 847,
+      y: 479,
+      width: 1378,
+      height: 771,
+    });
+  });
+
+  it('adapts an unlocked window when it moves to a differently scaled display', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSize: { width: 1378, height: 771 },
+      windowScaleBasis: { width: 3072, height: 1728 },
+      lockWindowCenter: false,
+    });
+    getDisplayNearestPointMock.mockReturnValue({
+      id: 1,
+      scaleFactor: 1.25,
+      workArea: { x: 0, y: 0, width: 3072, height: 1728 },
+    });
+    const { createMainWindow } = await import('../window');
+
+    createMainWindow();
+    const movedHandler = onMock.mock.calls.find(([eventName]) => eventName === 'moved')?.[1] as
+      | (() => void)
+      | undefined;
+    const resizeHandler = onMock.mock.calls.find(([eventName]) => eventName === 'resize')?.[1] as
+      | (() => void)
+      | undefined;
+    expect(movedHandler).toBeDefined();
+    expect(resizeHandler).toBeDefined();
+
+    getSizeMock.mockReturnValue([1723, 964]);
+    resizeHandler!();
+    movedHandler!();
+
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.625);
+    expect(setBoundsMock).toHaveBeenLastCalledWith({
+      x: 120,
+      y: 140,
+      width: 861,
+      height: 482,
+    });
+  });
+
   it('resizes hidden-row height deltas without changing the window width', async () => {
     const { createMainWindow, resizeMainWindowByHeightDelta } = await import('../window');
 
@@ -195,6 +382,28 @@ describe('createMainWindow', () => {
       width: 720,
       height: 360,
     });
+  });
+
+  it('scales compact-layout height deltas without changing the saved basis', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSize: { width: 1378, height: 771 },
+      windowScaleBasis: { width: 3072, height: 1728 },
+      lockWindowCenter: true,
+    });
+    getSizeMock.mockReturnValue([861, 482]);
+    const { IPC_CHANNELS } = await import('../../shared/ipcChannels');
+    const { createMainWindow, resizeMainWindowByHeightDelta } = await import('../window');
+
+    createMainWindow();
+    resizeMainWindowByHeightDelta(-120);
+
+    expect(setBoundsMock).toHaveBeenLastCalledWith({
+      x: 530,
+      y: 337,
+      width: 861,
+      height: 407,
+    });
+    expect(webContentsSendMock).toHaveBeenLastCalledWith(IPC_CHANNELS.WINDOW_RESIZED, 1378, 651);
   });
 
   it('reports hidden-row programmatic resizes so compact window sizes persist', async () => {
@@ -213,10 +422,41 @@ describe('createMainWindow', () => {
 
     expect(webContentsSendMock).toHaveBeenCalledWith(IPC_CHANNELS.WINDOW_RESIZED, 720, 360);
 
+    const willResizeHandler = onMock.mock.calls.find(
+      ([eventName]) => eventName === 'will-resize',
+    )?.[1] as ((event: { preventDefault: () => void }) => void) | undefined;
+    expect(willResizeHandler).toBeDefined();
+    willResizeHandler!({ preventDefault: jest.fn() });
     getSizeMock.mockReturnValue([720, 500]);
     resizeHandler!();
 
     expect(webContentsSendMock).toHaveBeenCalledWith(IPC_CHANNELS.WINDOW_RESIZED, 720, 500);
+  });
+
+  it('persists manual resize dimensions in the saved scale basis', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSize: { width: 1378, height: 771 },
+      windowScaleBasis: { width: 3072, height: 1728 },
+      lockWindowCenter: true,
+    });
+    const { IPC_CHANNELS } = await import('../../shared/ipcChannels');
+    const { createMainWindow } = await import('../window');
+
+    createMainWindow();
+    const resizeHandler = onMock.mock.calls.find(([eventName]) => eventName === 'resize')?.[1] as
+      | (() => void)
+      | undefined;
+    expect(resizeHandler).toBeDefined();
+
+    const willResizeHandler = onMock.mock.calls.find(
+      ([eventName]) => eventName === 'will-resize',
+    )?.[1] as ((event: { preventDefault: () => void }) => void) | undefined;
+    expect(willResizeHandler).toBeDefined();
+    willResizeHandler!({ preventDefault: jest.fn() });
+    getSizeMock.mockReturnValue([900, 500]);
+    resizeHandler!();
+
+    expect(webContentsSendMock).toHaveBeenLastCalledWith(IPC_CHANNELS.WINDOW_RESIZED, 1440, 800);
   });
 
   it('keeps blur auto-hide suspended while renderer modals are mounted', async () => {
@@ -239,5 +479,111 @@ describe('createMainWindow', () => {
     blurHandler!();
 
     expect(hideMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('temporarily disables always-on-top while native dialogs are open', async () => {
+    const { createMainWindow, keepMainWindowVisibleDuringNativeDialog } = await import('../window');
+
+    createMainWindow();
+    setAlwaysOnTopMock.mockClear();
+
+    await keepMainWindowVisibleDuringNativeDialog(async () => {
+      expect(setAlwaysOnTopMock).toHaveBeenLastCalledWith(false);
+    });
+
+    expect(showMock).toHaveBeenCalledTimes(1);
+    expect(setAlwaysOnTopMock.mock.calls.map(([enabled]) => enabled)).toEqual([false, true]);
+  });
+
+  it('restores native dialog always-on-top policy when the dialog task rejects', async () => {
+    const { createMainWindow, keepMainWindowVisibleDuringNativeDialog } = await import('../window');
+
+    createMainWindow();
+    setAlwaysOnTopMock.mockClear();
+
+    await expect(
+      keepMainWindowVisibleDuringNativeDialog(async () => {
+        throw new Error('dialog failed');
+      }),
+    ).rejects.toThrow('dialog failed');
+
+    expect(setAlwaysOnTopMock.mock.calls.map(([enabled]) => enabled)).toEqual([false, true]);
+  });
+
+  it('waits for overlapping native dialogs before restoring always-on-top policy', async () => {
+    const { createMainWindow, keepMainWindowVisibleDuringNativeDialog } = await import('../window');
+
+    createMainWindow();
+    setAlwaysOnTopMock.mockClear();
+
+    await keepMainWindowVisibleDuringNativeDialog(async () => {
+      await keepMainWindowVisibleDuringNativeDialog(async () => {
+        expect(setAlwaysOnTopMock.mock.calls.map(([enabled]) => enabled)).toEqual([false]);
+      });
+
+      expect(setAlwaysOnTopMock.mock.calls.map(([enabled]) => enabled)).toEqual([false]);
+    });
+
+    expect(setAlwaysOnTopMock.mock.calls.map(([enabled]) => enabled)).toEqual([false, true]);
+  });
+
+  it('keeps policy reapplication from restoring always-on-top before native dialogs close', async () => {
+    const { createMainWindow, keepMainWindowVisibleDuringNativeDialog, setLockWindowCenter } =
+      await import('../window');
+
+    createMainWindow();
+    setAlwaysOnTopMock.mockClear();
+
+    await keepMainWindowVisibleDuringNativeDialog(async () => {
+      setLockWindowCenter(true);
+
+      expect(setAlwaysOnTopMock.mock.calls.map(([enabled]) => enabled)).toEqual([false, false]);
+    });
+
+    expect(setAlwaysOnTopMock.mock.calls.map(([enabled]) => enabled)).toEqual([false, false, true]);
+  });
+
+  it('keeps unlocked windows movable without enabling drag-drop runtime mode on startup', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSize: {
+        width: 720,
+        height: 480,
+      },
+      lockWindowCenter: false,
+    });
+    const { createMainWindow } = await import('../window');
+
+    createMainWindow();
+    const blurHandler = onMock.mock.calls.find(([eventName]) => eventName === 'blur')?.[1] as
+      | (() => void)
+      | undefined;
+    expect(blurHandler).toBeDefined();
+
+    expect(setMovableMock).toHaveBeenLastCalledWith(true);
+
+    blurHandler!();
+
+    expect(hideMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps drag-drop mode and center lock mutually exclusive in the main window policy', async () => {
+    const { createMainWindow, setDragDropMode, setLockWindowCenter } = await import('../window');
+
+    createMainWindow();
+
+    setDragDropMode(true);
+
+    expect(setMovableMock).toHaveBeenLastCalledWith(true);
+    expect(setAlwaysOnTopMock).toHaveBeenLastCalledWith(false);
+
+    setLockWindowCenter(true);
+
+    expect(setMovableMock).toHaveBeenLastCalledWith(false);
+    expect(setAlwaysOnTopMock).toHaveBeenLastCalledWith(true);
+
+    setDragDropMode(true);
+
+    expect(setMovableMock).toHaveBeenLastCalledWith(true);
+    expect(setAlwaysOnTopMock).toHaveBeenLastCalledWith(false);
   });
 });

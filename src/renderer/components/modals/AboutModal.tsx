@@ -1,9 +1,9 @@
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { APP_DESCRIPTION, APP_NAME } from '../../../shared/constants';
-import { getI18n } from '../../i18n';
-import { useAppState, useDispatch } from '../../state/store';
+import { APP_NAME } from '../../../shared/constants';
+import { useDispatch } from '../../state/store';
 import { Modal } from '../common/Modal';
 
 interface AppInfo {
@@ -13,9 +13,8 @@ interface AppInfo {
 }
 
 export function AboutModal(): ReactElement {
-  const state = useAppState();
+  const { t } = useTranslation();
   const dispatch = useDispatch();
-  const i18n = getI18n(state.settings?.language);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
 
   useEffect(() => {
@@ -23,21 +22,21 @@ export function AboutModal(): ReactElement {
   }, []);
 
   return (
-    <Modal title={`${i18n.about.title} ${APP_NAME}`} width={350}>
+    <Modal title={t('modals.about.titleWithApp', { appName: APP_NAME })} width={350}>
       {appInfo ? (
         <div>
           <div className="modal-row">
-            <label>{i18n.about.application}</label>
+            <label>{t('modals.about.application')}:</label>
             <span>{appInfo.name}</span>
           </div>
 
           <div className="modal-row">
-            <label>{i18n.about.version}</label>
+            <label>{t('modals.about.version')}:</label>
             <span>{appInfo.version}</span>
           </div>
 
           <div className="modal-row">
-            <label>{i18n.about.gitCommit}</label>
+            <label>{t('modals.about.gitCommit')}:</label>
             <span
               style={{
                 fontFamily: 'monospace',
@@ -62,7 +61,7 @@ export function AboutModal(): ReactElement {
             color: 'var(--text-color)',
           }}
         >
-          {i18n.common.loading}
+          {t('modals.common.loading')}
         </div>
       )}
 
@@ -76,11 +75,13 @@ export function AboutModal(): ReactElement {
           lineHeight: '1.5',
         }}
       >
-        <p style={{ margin: 0 }}>{APP_DESCRIPTION}</p>
+        <p style={{ margin: 0 }}>{t('modals.about.description')}</p>
       </div>
 
       <div className="modal-actions">
-        <button onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>{i18n.common.close}</button>
+        <button onClick={() => dispatch({ type: 'CLOSE_MODAL' })}>
+          {t('modals.common.close')}
+        </button>
       </div>
     </Modal>
   );

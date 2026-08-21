@@ -22,7 +22,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 export function shouldAllowWindowMovement(state: WindowInteractionState): boolean {
-  return state.isDragDropMode && !state.lockWindowCenter;
+  return !state.lockWindowCenter;
 }
 
 export function shouldAllowWindowResize(state: WindowInteractionState): boolean {
@@ -48,6 +48,62 @@ export function constrainWindowSizeToWorkArea(
     width: clamp(size.width, minWidth, availableWidth),
     height: clamp(size.height, minHeight, availableHeight),
   };
+}
+
+export function getDisplayScaleFactor(
+  scaleBasis: Pick<WorkArea, 'width' | 'height'>,
+  targetWorkArea: Pick<WorkArea, 'width' | 'height'>,
+): number {
+  if (
+    !Number.isFinite(scaleBasis.width) ||
+    !Number.isFinite(scaleBasis.height) ||
+    !Number.isFinite(targetWorkArea.width) ||
+    !Number.isFinite(targetWorkArea.height) ||
+    scaleBasis.width <= 0 ||
+    scaleBasis.height <= 0 ||
+    targetWorkArea.width <= 0 ||
+    targetWorkArea.height <= 0
+  ) {
+    return 1;
+  }
+
+  return Math.min(
+    targetWorkArea.width / scaleBasis.width,
+    targetWorkArea.height / scaleBasis.height,
+  );
+}
+
+export function getDisplayAwareWindowSize(
+  size: WindowSize,
+  scaleBasis: Pick<WorkArea, 'width' | 'height'>,
+  targetWorkArea: Pick<WorkArea, 'width' | 'height'>,
+): WindowSize {
+  const basisSize = constrainWindowSizeToWorkArea(size, scaleBasis);
+  const scaleFactor = getDisplayScaleFactor(scaleBasis, targetWorkArea);
+
+  return constrainWindowSizeToWorkArea(
+    {
+      width: basisSize.width * scaleFactor,
+      height: basisSize.height * scaleFactor,
+    },
+    targetWorkArea,
+  );
+}
+
+export function getWindowSizeInScaleBasis(
+  size: WindowSize,
+  scaleBasis: Pick<WorkArea, 'width' | 'height'>,
+  currentWorkArea: Pick<WorkArea, 'width' | 'height'>,
+): WindowSize {
+  const scaleFactor = getDisplayScaleFactor(scaleBasis, currentWorkArea);
+
+  return constrainWindowSizeToWorkArea(
+    {
+      width: size.width / scaleFactor,
+      height: size.height / scaleFactor,
+    },
+    scaleBasis,
+  );
 }
 
 function isFiniteWindowSize(size: WindowSize | null | undefined): size is WindowSize {

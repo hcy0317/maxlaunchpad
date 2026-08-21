@@ -6,7 +6,7 @@ function readProjectFile(...segments: string[]): string {
 }
 
 describe('edit key workflow contract', () => {
-  it('opens key editing from a key button double click without immediately launching', () => {
+  it('opens key editing from a key button double click without delayed launch timing', () => {
     const keyButton = readProjectFile('src', 'renderer', 'components', 'keyboard', 'KeyButton.tsx');
     const virtualKeyboard = readProjectFile(
       'src',
@@ -17,8 +17,9 @@ describe('edit key workflow contract', () => {
     );
 
     expect(keyButton).toContain('onDoubleClick={handleDoubleClick}');
-    expect(keyButton).toContain('clearPendingClick();');
     expect(keyButton).toContain('onEdit?.();');
+    expect(keyButton).not.toContain('clickTimerRef');
+    expect(keyButton).not.toContain('clearPendingClick');
     expect(virtualKeyboard).toContain("type: 'OPEN_EDIT_KEY_MODAL'");
     expect(virtualKeyboard).toContain('onEdit={() => handleEditKey');
   });

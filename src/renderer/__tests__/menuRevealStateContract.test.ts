@@ -10,6 +10,7 @@ describe('menu reveal state contract', () => {
     const app = readProjectFile('src', 'renderer', 'App.tsx');
     const topBar = readProjectFile('src', 'renderer', 'components', 'layout', 'TopBar.tsx');
 
+    expect(app).toContain('state.ui.isMenuRevealKeyPressed');
     expect(topBar).toContain('state.ui.isMenuRevealKeyPressed');
     expect(app).not.toContain('state.ui.isAltPressed');
     expect(topBar).not.toContain('state.ui.isAltPressed');

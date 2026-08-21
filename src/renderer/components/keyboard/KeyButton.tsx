@@ -36,7 +36,6 @@ export function KeyButton({
   const [isDragOver, setIsDragOver] = useState(false);
   const [isMoveSource, setIsMoveSource] = useState(false);
   const longPressTimerRef = useRef<number | null>(null);
-  const clickTimerRef = useRef<number | null>(null);
   const cleanupMoveRef = useRef<() => void>(() => {});
   const suppressClickRef = useRef(false);
 
@@ -62,23 +61,15 @@ export function KeyButton({
     .filter(Boolean)
     .join(' ');
 
-  const clearPendingClick = () => {
-    if (clickTimerRef.current !== null) {
-      window.clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-    }
-  };
-
   useEffect(
     () => () => {
       cleanupMoveRef.current();
-      clearPendingClick();
     },
     [],
   );
 
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (e.button !== 0 || !keyConfig?.filePath || isHidden || !onMoveKey) return;
+    if (e.button > 0 || !keyConfig?.filePath || isHidden || !onMoveKey) return;
     const moveKey: NonNullable<typeof onMoveKey> = onMoveKey;
 
     const button = e.currentTarget;
@@ -86,6 +77,7 @@ export function KeyButton({
     const startX = e.clientX;
     const startY = e.clientY;
     let moving = false;
+    let pointerMovedBeyondClickThreshold = false;
     let currentTarget: HTMLElement | null = null;
 
     const clearTarget = () => {
@@ -123,6 +115,8 @@ export function KeyButton({
     function handlePointerMove(event: PointerEvent) {
       if (!moving) {
         if (Math.hypot(event.clientX - startX, event.clientY - startY) > 8) {
+          pointerMovedBeyondClickThreshold = true;
+          suppressClickRef.current = true;
           if (longPressTimerRef.current !== null) {
             window.clearTimeout(longPressTimerRef.current);
             longPressTimerRef.current = null;
@@ -150,6 +144,11 @@ export function KeyButton({
         if (targetTabId && targetKeyId) {
           moveKey(source, { tabId: targetTabId, keyId: targetKeyId });
         }
+        window.setTimeout(() => {
+          suppressClickRef.current = false;
+        }, 0);
+      } else if (pointerMovedBeyondClickThreshold) {
+        event.preventDefault();
         window.setTimeout(() => {
           suppressClickRef.current = false;
         }, 0);
@@ -233,26 +232,19 @@ export function KeyButton({
       e.preventDefault();
       e.stopPropagation();
       suppressClickRef.current = false;
-      clearPendingClick();
       return;
     }
 
     if (e.detail > 1) {
-      clearPendingClick();
       return;
     }
 
-    clearPendingClick();
-    clickTimerRef.current = window.setTimeout(() => {
-      clickTimerRef.current = null;
-      onClick();
-    }, 220);
+    onClick();
   };
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    clearPendingClick();
     onEdit?.();
   };
 

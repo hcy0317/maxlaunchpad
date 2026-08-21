@@ -1,13 +1,16 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { DEFAULT_HIDE_ELEMENTS } from '../../../../shared/constants';
 import type { AppSettings, KeyboardProfile } from '../../../../shared/types';
+import i18n from '../../../i18n';
 import { TopBar } from '../TopBar';
 
 const dispatchMock = jest.fn();
+let mockConfigRevision = 0;
+let mockIsDragDropMode = false;
 
 const settings: AppSettings = {
   hotkey: { modifiers: ['Alt'], key: '`' },
@@ -18,7 +21,7 @@ const settings: AppSettings = {
   launchOnStartup: true,
   startInTray: false,
   theme: 'dark',
-  language: 'zh',
+  language: 'zh-CN',
   customStyle: 'modern',
   windowSize: { width: 1000, height: 600 },
   hideElements: { ...DEFAULT_HIDE_ELEMENTS },
@@ -36,9 +39,10 @@ jest.mock('../../../state/store', () => ({
     ui: {
       activeTabId: '1',
       searchQuery: '',
-      isDragDropMode: false,
+      isDragDropMode: mockIsDragDropMode,
       isMenuRevealKeyPressed: false,
       isConfigDirty: false,
+      configRevision: mockConfigRevision,
       isLoading: false,
       error: null,
       modal: { type: 'none' },
@@ -63,17 +67,28 @@ jest.mock('../SearchBox', () => ({
 describe('TopBar window controls', () => {
   const minimizeWindow = jest.fn();
   const hideWindow = jest.fn();
+  const setDragDropMode = jest.fn();
+  const setLockWindowCenter = jest.fn();
 
   beforeEach(() => {
+    mockConfigRevision = 0;
+    mockIsDragDropMode = false;
     settings.hideElements = { ...DEFAULT_HIDE_ELEMENTS };
     settings.menuRevealKey = 'Alt';
+    settings.lockWindowCenter = true;
+    settings.language = 'zh-CN';
+    void i18n.changeLanguage('zh-CN');
     minimizeWindow.mockClear();
     hideWindow.mockClear();
+    setDragDropMode.mockClear();
+    setLockWindowCenter.mockClear();
     dispatchMock.mockClear();
     window.electronAPI = {
       ...window.electronAPI,
       minimizeWindow,
       hideWindow,
+      setDragDropMode,
+      setLockWindowCenter,
     };
   });
 
@@ -92,6 +107,67 @@ describe('TopBar window controls', () => {
 
     expect(minimizeWindow).toHaveBeenCalledTimes(1);
     expect(hideWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears dirty config with the revision captured before a menu flush', async () => {
+    mockConfigRevision = 7;
+    const saveSettings = jest.fn().mockResolvedValue(undefined);
+    const saveProfile = jest.fn().mockResolvedValue(undefined);
+    const saveAsDialog = jest.fn().mockResolvedValue({ canceled: true });
+    window.electronAPI = {
+      ...window.electronAPI,
+      minimizeWindow,
+      hideWindow,
+      saveSettings,
+      saveProfile,
+      saveAsDialog,
+    };
+
+    render(<TopBar />);
+
+    fireEvent.click(screen.getByText('文件'));
+    fireEvent.click(screen.getByText('另存为...'));
+
+    await waitFor(() => {
+      expect(saveSettings).toHaveBeenCalledWith(settings);
+      expect(saveProfile).toHaveBeenCalledWith(profile, settings.activeProfilePath);
+    });
+    expect(dispatchMock).toHaveBeenCalledWith({
+      type: 'SET_CONFIG_DIRTY',
+      dirty: false,
+      revision: 7,
+    });
+  });
+
+  it('turns off center lock when enabling drag-drop mode', () => {
+    settings.lockWindowCenter = true;
+
+    render(<TopBar />);
+
+    fireEvent.click(screen.getByText('视图'));
+    fireEvent.click(screen.getByText('拖放模式'));
+
+    expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_DRAG_DROP_MODE', enabled: true });
+    expect(setLockWindowCenter).toHaveBeenCalledWith(false);
+    expect(setDragDropMode).toHaveBeenCalledWith(true);
+  });
+
+  it('turns off drag-drop mode when enabling center lock', () => {
+    settings.lockWindowCenter = false;
+    mockIsDragDropMode = true;
+
+    render(<TopBar />);
+
+    fireEvent.click(screen.getByText('视图'));
+    fireEvent.click(screen.getByText('锁定窗口居中'));
+
+    expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_DRAG_DROP_MODE', enabled: false });
+    expect(dispatchMock).toHaveBeenCalledWith({
+      type: 'UPDATE_SETTINGS',
+      settings: { lockWindowCenter: true },
+    });
+    expect(setDragDropMode).toHaveBeenCalledWith(false);
+    expect(setLockWindowCenter).toHaveBeenCalledWith(true);
   });
 
   it('pins custom window controls to the visible right edge of the titlebar', () => {
@@ -142,6 +218,6 @@ describe('TopBar window controls', () => {
     fireEvent.click(screen.getByText('视图'));
     fireEvent.mouseEnter(screen.getByText('隐藏元素'));
 
-    expect(screen.getByText('菜单（按 Win 临时显示）')).toBeInTheDocument();
+    expect(screen.getByText('菜单栏（按 Win 临时显示）')).toBeInTheDocument();
   });
 });

@@ -1,6 +1,11 @@
 import { useCallback, useEffect } from 'react';
 
-import { DEFAULT_MENU_REVEAL_KEY, FUNCTION_KEYS, LETTER_KEYS, NUM_KEYS } from '../../shared/constants';
+import {
+  DEFAULT_MENU_REVEAL_KEY,
+  FUNCTION_KEYS,
+  LETTER_KEYS,
+  NUM_KEYS,
+} from '../../shared/constants';
 import type { MenuRevealKey } from '../../shared/types';
 import { useAppState, useDispatch } from '../state/store';
 import { useLaunchProgram } from './useLaunchProgram';
@@ -159,7 +164,12 @@ function getMenuRevealKeyFromKeyboardEvent(event: KeyboardEvent): MenuRevealKey 
   if (event.key === 'Alt' || event.code === 'AltLeft' || event.code === 'AltRight') {
     return 'Alt';
   }
-  if (event.key === 'Meta' || event.key === 'OS' || event.code === 'MetaLeft' || event.code === 'MetaRight') {
+  if (
+    event.key === 'Meta' ||
+    event.key === 'OS' ||
+    event.code === 'MetaLeft' ||
+    event.code === 'MetaRight'
+  ) {
     return 'Win';
   }
   return null;

@@ -1,6 +1,7 @@
 import './styles/global.css';
 
 import { useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { VirtualKeyboard } from './components/keyboard/VirtualKeyboard';
 import { TopBar } from './components/layout/TopBar';
@@ -18,13 +19,13 @@ import { useKeyboardNav } from './hooks/useKeyboardNav';
 import { useTheme } from './hooks/useTheme';
 import { useWindowBehavior } from './hooks/useWindowBehavior';
 import { useWindowTitle } from './hooks/useWindowTitle';
-import { getI18n } from './i18n';
+import i18n from './i18n';
 import { AppStateProvider, useAppState, useDispatch } from './state/store';
 
 function AppContent() {
+  const { t } = useTranslation();
   const state = useAppState();
   const dispatch = useDispatch();
-  const i18n = getI18n(state.settings?.language);
   const closeModal = useCallback(() => {
     dispatch({ type: 'CLOSE_MODAL' });
   }, [dispatch]);
@@ -53,10 +54,7 @@ function AppContent() {
         const { settings, profile } = await window.electronAPI.loadConfig();
         dispatch({ type: 'SET_CONFIG', settings, profile });
       } catch {
-        dispatch({
-          type: 'SET_ERROR',
-          error: getI18n(undefined).errors.loadConfigurationFailed,
-        });
+        dispatch({ type: 'SET_ERROR', error: i18n.t('errors.failedToLoadConfiguration') });
       }
     }
     void load();
@@ -75,11 +73,23 @@ function AppContent() {
             color: 'var(--text-color)',
           }}
         >
-          {i18n.common.loading}
+          {t('app.loading')}
         </div>
       </div>
     );
   }
+
+  // After loading, settings is guaranteed to be non-null
+  const settings = state.settings!;
+
+  // Determine if menu should be hidden
+  const isMenuHidden = settings.hideElements.menu;
+
+  // Container class based on menu visibility (reveal-key state is managed by useKeyboardNav)
+  const containerClass =
+    isMenuHidden && !state.ui.isMenuRevealKeyPressed
+      ? 'app-container menu-hidden'
+      : 'app-container';
 
   const renderModal = () => {
     switch (state.ui.modal.type) {
@@ -99,7 +109,7 @@ function AppContent() {
   };
 
   return (
-    <div className="app-container">
+    <div className={containerClass}>
       <TopBar />
       <VirtualKeyboard />
 
