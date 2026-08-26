@@ -293,6 +293,29 @@ describe('createMainWindow', () => {
     expect(saveSettingsMock).not.toHaveBeenCalled();
   });
 
+  it('keeps a user work-area-filling size after normal bounds clamping', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSize: { width: 2048, height: 896 },
+      windowScaleBasis: { width: 2048, height: 896 },
+      lockWindowCenter: true,
+    });
+    getDisplayNearestPointMock.mockReturnValue({
+      id: 2,
+      scaleFactor: 1,
+      workArea: { x: 0, y: 0, width: 2048, height: 896 },
+    });
+    const { createMainWindow } = await import('../window');
+
+    createMainWindow();
+
+    expect(browserWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ width: 2016, height: 864 }),
+    );
+    expect(saveSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ windowSize: { width: 2016, height: 864 } }),
+    );
+  });
+
   it('reapplies the saved display proportion whenever a locked window is shown', async () => {
     loadSettingsMock.mockReturnValue({
       windowSize: { width: 1378, height: 771 },
@@ -404,8 +427,14 @@ describe('createMainWindow', () => {
       getDisplayMatchingMock.mockReturnValue(compactDisplay);
       metricsHandler!({}, compactDisplay, ['bounds', 'workArea', 'scaleFactor']);
 
+      getSizeMock.mockReturnValue([861, 482]);
+      resizeHandler!();
+      jest.advanceTimersByTime(150);
+
       // Windows can report an automatic, intermediate DIP size before Electron reaches
-      // the explicit target bounds. It must not become the user's saved basis size.
+      // the explicit target bounds, including after the target was already observed and
+      // near the end of the suppression window. It must not become the user's saved basis.
+      jest.advanceTimersByTime(750);
       getSizeMock.mockReturnValue([690, 386]);
       resizeHandler!();
       jest.advanceTimersByTime(150);
@@ -553,6 +582,53 @@ describe('createMainWindow', () => {
 
       expect(webContentsSendMock).toHaveBeenCalledWith(IPC_CHANNELS.WINDOW_RESIZED, 800, 500);
     } finally {
+      jest.runOnlyPendingTimers();
+      jest.useRealTimers();
+    }
+  });
+
+  it('persists resize-only platform input that finishes during the programmatic guard', async () => {
+    jest.useFakeTimers();
+    jest.doMock('../platform', () => ({ IS_LINUX: true }));
+    try {
+      loadSettingsMock.mockReturnValue({
+        windowSize: { width: 1378, height: 771 },
+        windowScaleBasis: { width: 3072, height: 1728 },
+        lockWindowCenter: true,
+      });
+      getDisplayNearestPointMock.mockReturnValue({
+        id: 2,
+        scaleFactor: 1.25,
+        workArea: { x: 0, y: 0, width: 3072, height: 1728 },
+      });
+      const compactDisplay = {
+        id: 2,
+        scaleFactor: 1.5,
+        workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+      };
+      getDisplayMatchingMock.mockReturnValue(compactDisplay);
+      const { IPC_CHANNELS } = await import('../../shared/ipcChannels');
+      const { createMainWindow } = await import('../window');
+
+      createMainWindow();
+      const metricsHandler = screenOnMock.mock.calls.find(
+        ([eventName]) => eventName === 'display-metrics-changed',
+      )?.[1] as ((event: unknown, display: unknown, changedMetrics: string[]) => void) | undefined;
+      const resizeHandler = onMock.mock.calls.find(([eventName]) => eventName === 'resize')?.[1] as
+        | (() => void)
+        | undefined;
+      expect(metricsHandler).toBeDefined();
+      expect(resizeHandler).toBeDefined();
+
+      metricsHandler!({}, compactDisplay, ['bounds', 'workArea', 'scaleFactor']);
+      jest.advanceTimersByTime(500);
+      getSizeMock.mockReturnValue([900, 500]);
+      resizeHandler!();
+      jest.advanceTimersByTime(1000);
+
+      expect(webContentsSendMock).toHaveBeenCalledWith(IPC_CHANNELS.WINDOW_RESIZED, 1440, 800);
+    } finally {
+      jest.dontMock('../platform');
       jest.runOnlyPendingTimers();
       jest.useRealTimers();
     }

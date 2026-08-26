@@ -119,23 +119,11 @@ function isFiniteWindowSize(size: WindowSize | null | undefined): size is Window
 export function normalizeWindowSizeToWorkArea(
   size: WindowSize | null | undefined,
   workArea: Pick<WorkArea, 'width' | 'height'>,
-  options: { resetWorkAreaFill?: boolean } = {},
 ): WindowSize {
   const constrainedSize = constrainWindowSizeToWorkArea(
     isFiniteWindowSize(size) ? size : DEFAULT_WINDOW_SIZE,
     workArea,
   );
-
-  if (options.resetWorkAreaFill) {
-    const maxSize = constrainWindowSizeToWorkArea(
-      { width: Number.MAX_SAFE_INTEGER, height: Number.MAX_SAFE_INTEGER },
-      workArea,
-    );
-
-    if (constrainedSize.width >= maxSize.width - 1) {
-      return constrainWindowSizeToWorkArea(DEFAULT_WINDOW_SIZE, workArea);
-    }
-  }
 
   return constrainedSize;
 }

@@ -15,6 +15,7 @@ import {
 } from '../shared/windowBehavior';
 import { loadSettings, saveSettings } from './configStore';
 import log from './logger';
+import { IS_LINUX } from './platform';
 
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
@@ -28,6 +29,7 @@ let preferredWindowSize: WindowSize | null = null;
 let windowScaleBasis: WindowSize | null = null;
 let lastProgrammaticResizeSize: WindowSize | null = null;
 let programmaticResizeGuardTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingResizeOnlyPlatformPersistence: BrowserWindow | null = null;
 let isManualWindowResize = false;
 let resizePersistenceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -53,10 +55,16 @@ function suppressProgrammaticResizeNotifications(size?: WindowSize): void {
     if (programmaticResizeGuardTimer) {
       clearTimeout(programmaticResizeGuardTimer);
     }
+    pendingResizeOnlyPlatformPersistence = null;
     lastProgrammaticResizeSize = size;
     programmaticResizeGuardTimer = setTimeout(() => {
       programmaticResizeGuardTimer = null;
       lastProgrammaticResizeSize = null;
+      const pendingWin = pendingResizeOnlyPlatformPersistence;
+      pendingResizeOnlyPlatformPersistence = null;
+      if (pendingWin && getMainWindow() === pendingWin) {
+        scheduleWindowSizePersistence(pendingWin);
+      }
     }, PROGRAMMATIC_RESIZE_GUARD_MS);
   }
 }
@@ -67,6 +75,7 @@ function clearProgrammaticResizeGuard(): void {
     programmaticResizeGuardTimer = null;
   }
   lastProgrammaticResizeSize = null;
+  pendingResizeOnlyPlatformPersistence = null;
 }
 
 function clearPendingWindowSizePersistence(): void {
@@ -76,22 +85,29 @@ function clearPendingWindowSizePersistence(): void {
   }
 }
 
-function persistCurrentWindowSize(win: BrowserWindow): void {
+function persistCurrentWindowSize(
+  win: BrowserWindow,
+  programmaticResizeSizeAtEvent: WindowSize | null = null,
+): void {
   const [width, height] = win.getSize();
   const currentSize = { width, height };
-  if (lastProgrammaticResizeSize) {
+  const guardedSize = lastProgrammaticResizeSize ?? programmaticResizeSizeAtEvent;
+  if (guardedSize) {
     // Per-monitor DPI transitions can report stale intermediate bounds before the
-    // explicit target is reached. None of those notifications represent a user resize.
-    if (isSameWindowSize(currentSize, lastProgrammaticResizeSize)) {
-      clearProgrammaticResizeGuard();
+    // explicit target is reached. Keep the entire transition generation suppressed,
+    // even if its debounce callback runs just after the time-based guard expires.
+    if (IS_LINUX && !isSameWindowSize(currentSize, guardedSize)) {
+      if (lastProgrammaticResizeSize) {
+        pendingResizeOnlyPlatformPersistence = win;
+      } else {
+        scheduleWindowSizePersistence(win);
+      }
     }
     return;
   }
 
   const currentWorkArea = screen.getDisplayMatching(win.getBounds()).workArea;
-  const normalizedSize = normalizeWindowSizeToWorkArea(currentSize, currentWorkArea, {
-    resetWorkAreaFill: isLockWindowCenter,
-  });
+  const normalizedSize = normalizeWindowSizeToWorkArea(currentSize, currentWorkArea);
   const sizeInScaleBasis = windowScaleBasis
     ? getWindowSizeInScaleBasis(normalizedSize, windowScaleBasis, currentWorkArea)
     : normalizedSize;
@@ -110,10 +126,13 @@ function persistCurrentWindowSize(win: BrowserWindow): void {
 
 function scheduleWindowSizePersistence(win: BrowserWindow): void {
   clearPendingWindowSizePersistence();
+  const programmaticResizeSizeAtEvent = lastProgrammaticResizeSize
+    ? { ...lastProgrammaticResizeSize }
+    : null;
   resizePersistenceTimer = setTimeout(() => {
     resizePersistenceTimer = null;
     if (getMainWindow() === win) {
-      persistCurrentWindowSize(win);
+      persistCurrentWindowSize(win, programmaticResizeSizeAtEvent);
     }
   }, 150);
 }
@@ -135,9 +154,7 @@ export function createMainWindow(): BrowserWindow {
     ? savedScaleBasis
     : { width: currentWorkArea.width, height: currentWorkArea.height };
   windowScaleBasis = resolvedScaleBasis;
-  preferredWindowSize = normalizeWindowSizeToWorkArea(settings.windowSize, resolvedScaleBasis, {
-    resetWorkAreaFill: settings.lockWindowCenter,
-  });
+  preferredWindowSize = normalizeWindowSizeToWorkArea(settings.windowSize, resolvedScaleBasis);
   if (!hasValidScaleBasis || !isSameWindowSize(settings.windowSize, preferredWindowSize)) {
     saveSettings({
       ...settings,
