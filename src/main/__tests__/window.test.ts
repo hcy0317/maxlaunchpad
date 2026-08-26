@@ -307,6 +307,7 @@ describe('createMainWindow', () => {
     expect(saveSettingsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         windowSizeRatio: { width: 720 / 1920, height: 480 / 1080 },
+        contentScaleRatio: 1 / 1920,
       }),
     );
   });
@@ -367,13 +368,41 @@ describe('createMainWindow', () => {
       expect.objectContaining({
         width: 1558,
         height: 915,
-        webPreferences: expect.objectContaining({ zoomFactor: 1.558 }),
+        webPreferences: expect.objectContaining({ zoomFactor: 1728 / 1383 }),
       }),
     );
     expect(saveSettingsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         windowSizeRatio: { width: 1558 / 3072, height: 915 / 1728 },
+        contentScaleRatio: 1728 / 1383 / 3072,
       }),
+    );
+  });
+
+  it('restores the live ratio-based window to the old 1x content size', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSizeRatio: { width: 1247 / 2458, height: 732 / 1383 },
+      lockWindowCenter: true,
+    });
+    getDisplayNearestPointMock.mockReturnValue({
+      id: 2,
+      scaleFactor: 1.5625,
+      bounds: { x: 0, y: 0, width: 2458, height: 1383 },
+      workArea: { x: 0, y: 0, width: 2458, height: 1383 },
+    });
+    const { createMainWindow } = await import('../window');
+
+    createMainWindow();
+
+    expect(browserWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        width: 1247,
+        height: 732,
+        webPreferences: expect.objectContaining({ zoomFactor: 1 }),
+      }),
+    );
+    expect(saveSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ contentScaleRatio: 1 / 2458 }),
     );
   });
 
@@ -457,7 +486,7 @@ describe('createMainWindow', () => {
       },
       ['bounds', 'workArea', 'scaleFactor'],
     );
-    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.861);
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.625);
     expect(setBoundsMock).toHaveBeenLastCalledWith({
       x: 530,
       y: 299,
@@ -474,7 +503,7 @@ describe('createMainWindow', () => {
       },
       ['bounds', 'workArea', 'scaleFactor'],
     );
-    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(1.378);
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(1);
     expect(setBoundsMock).toHaveBeenLastCalledWith({
       x: 847,
       y: 479,
@@ -586,7 +615,7 @@ describe('createMainWindow', () => {
     resizeHandler!();
     movedHandler!();
 
-    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.861);
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.625);
     expect(setBoundsMock).toHaveBeenLastCalledWith({
       x: 120,
       y: 140,
@@ -815,7 +844,7 @@ describe('createMainWindow', () => {
       1888 / 1920,
       1048 / 1080,
     );
-    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(1.888);
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(1);
   });
 
   it('keeps blur auto-hide suspended while renderer modals are mounted', async () => {

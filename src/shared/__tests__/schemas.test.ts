@@ -238,7 +238,9 @@ describe('AppSettingsSchema', () => {
     theme: 'dark' as const,
     language: 'zh-CN' as const,
     customStyle: '.key { color: red; }',
+    fontFamily: 'Segoe UI',
     windowSizeRatio: { width: 1000 / 1920, height: 600 / 1080 },
+    contentScaleRatio: 1 / 1920,
     hideElements: { ...DEFAULT_HIDE_ELEMENTS },
   };
 
@@ -296,6 +298,17 @@ describe('AppSettingsSchema', () => {
         false,
       );
     }
+  });
+
+  it('should reject invalid content scale ratios and oversized font names', () => {
+    for (const contentScaleRatio of [0, -0.1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(AppSettingsSchema.safeParse({ ...validSettings, contentScaleRatio }).success).toBe(
+        false,
+      );
+    }
+    expect(
+      AppSettingsSchema.safeParse({ ...validSettings, fontFamily: 'A'.repeat(201) }).success,
+    ).toBe(false);
   });
 
   it('should reject settings missing required fields', () => {

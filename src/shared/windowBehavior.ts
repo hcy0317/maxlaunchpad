@@ -1,4 +1,4 @@
-import { DEFAULT_WINDOW_SIZE, WINDOW_UI_DESIGN_WIDTH } from './constants';
+import { DEFAULT_WINDOW_SIZE } from './constants';
 import type { WindowSize, WindowSizeRatio } from './types';
 
 export interface WorkArea {
@@ -115,10 +115,31 @@ export function getWindowSizeFromRatio(
   );
 }
 
-export function getWindowZoomFactor(size: WindowSize): number {
-  // This is a design coordinate, not persisted window state. Scaling from the actual
-  // window width keeps text and icons proportional to each user-defined window ratio.
-  return Math.max(0.01, size.width / WINDOW_UI_DESIGN_WIDTH);
+export function getContentScaleRatio(
+  zoomFactor: number,
+  displayBounds: Pick<WorkArea, 'width' | 'height'>,
+): number {
+  if (!Number.isFinite(zoomFactor) || zoomFactor <= 0) {
+    return 1 / Math.max(1, displayBounds.width);
+  }
+  return zoomFactor / Math.max(1, displayBounds.width);
+}
+
+export function getContentZoomFactor(
+  contentScaleRatio: number,
+  displayBounds: Pick<WorkArea, 'width' | 'height'>,
+  availableWindowSize?: Pick<WindowSize, 'width'>,
+): number {
+  if (!Number.isFinite(contentScaleRatio) || contentScaleRatio <= 0) {
+    return 1;
+  }
+  const displayZoomFactor = contentScaleRatio * Math.max(1, displayBounds.width);
+  // Window size is only a down-scaling cap. A larger user window never enlarges
+  // content beyond the display-derived ratio, while a narrow window still fits.
+  const windowFitZoomFactor = availableWindowSize
+    ? availableWindowSize.width / DEFAULT_WINDOW_SIZE.width
+    : Number.POSITIVE_INFINITY;
+  return Math.max(0.01, Math.min(displayZoomFactor, windowFitZoomFactor));
 }
 
 function isFiniteWindowSize(size: WindowSize | null | undefined): size is WindowSize {

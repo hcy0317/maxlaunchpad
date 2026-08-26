@@ -2,11 +2,12 @@ import {
   constrainWindowSizeToWorkArea,
   getCenteredWindowBounds,
   getCenteredWindowPosition,
+  getContentScaleRatio,
+  getContentZoomFactor,
   getLegacyDisplayAwareWindowSize,
   getLegacyDisplayScaleFactor,
   getWindowSizeFromRatio,
   getWindowSizeRatio,
-  getWindowZoomFactor,
   normalizeWindowSizeToWorkArea,
   shouldAllowWindowMovement,
   shouldAllowWindowResize,
@@ -61,8 +62,9 @@ describe('windowBehavior', () => {
     expect(displaySize).toEqual({ width: 861, height: 482 });
   });
 
-  it('keeps window and UI proportions stable across resolution and DPI combinations', () => {
+  it('keeps window and content proportions stable across resolution and DPI combinations', () => {
     const ratio = getWindowSizeRatio({ width: 1247, height: 732 }, { width: 2458, height: 1383 });
+    const contentScaleRatio = getContentScaleRatio(1, { width: 2458, height: 1383 });
     expect(ratio.width).toBeCloseTo(1247 / 2458, 10);
     expect(ratio.height).toBeCloseTo(732 / 1383, 10);
 
@@ -94,7 +96,7 @@ describe('windowBehavior', () => {
       },
     ]) {
       const size = getWindowSizeFromRatio(ratio, display.bounds, display.workArea);
-      const zoomFactor = getWindowZoomFactor(size);
+      const zoomFactor = getContentZoomFactor(contentScaleRatio, display.bounds, size);
       const physicalDisplayWidth = display.bounds.width * display.scaleFactor;
       const physicalWindowWidth = size.width * display.scaleFactor;
       const physicalDesignPixel = zoomFactor * display.scaleFactor;
@@ -110,9 +112,34 @@ describe('windowBehavior', () => {
         0.5 / display.bounds.height + Number.EPSILON,
       );
       expect(physicalWindowWidth / physicalDisplayWidth).toBeCloseTo(actualWidthRatio, 12);
-      expect(physicalDesignPixel / physicalDisplayWidth).toBeCloseTo(actualWidthRatio / 1000, 12);
-      expect(physicalDesignPixel / physicalWindowWidth).toBeCloseTo(1 / 1000, 12);
+      expect(physicalDesignPixel / physicalDisplayWidth).toBeCloseTo(contentScaleRatio, 12);
     }
+  });
+
+  it('restores the old 1x content size without tying it to a 1247px window width', () => {
+    const sourceDisplay = { width: 2458, height: 1383 };
+    const contentScaleRatio = getContentScaleRatio(1, sourceDisplay);
+
+    expect(getContentZoomFactor(contentScaleRatio, sourceDisplay, { width: 1247 })).toBeCloseTo(
+      1,
+      12,
+    );
+    expect(getContentZoomFactor(contentScaleRatio, { width: 3072, height: 1728 })).toBeCloseTo(
+      3072 / 2458,
+      12,
+    );
+    expect(getContentZoomFactor(contentScaleRatio, { width: 1920, height: 1080 })).toBeCloseTo(
+      1920 / 2458,
+      12,
+    );
+  });
+
+  it('only uses window width to shrink content that would otherwise not fit', () => {
+    const display = { width: 2458, height: 1383 };
+    const contentScaleRatio = getContentScaleRatio(1, display);
+
+    expect(getContentZoomFactor(contentScaleRatio, display, { width: 1247 })).toBe(1);
+    expect(getContentZoomFactor(contentScaleRatio, display, { width: 720 })).toBe(0.72);
   });
 
   it('keeps a configured work-area-filling size after normal work-area clamping', () => {
