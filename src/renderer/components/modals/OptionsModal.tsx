@@ -18,6 +18,11 @@ export function OptionsModal(): ReactElement {
   );
   const [customStyle, setCustomStyle] = useState<string>(state.settings?.customStyle ?? 'default');
   const [availableStyles, setAvailableStyles] = useState<string[]>([]);
+  const [fontFamily, setFontFamily] = useState<string>(state.settings?.fontFamily ?? '');
+  const [availableFonts, setAvailableFonts] = useState<string[]>([]);
+  const [fontLoadState, setFontLoadState] = useState<'loading' | 'ready' | 'empty' | 'error'>(
+    'loading',
+  );
 
   useEffect(() => {
     if (state.settings) {
@@ -25,6 +30,7 @@ export function OptionsModal(): ReactElement {
       setStartInTray(state.settings.startInTray);
       setTheme(state.settings.theme);
       setCustomStyle(state.settings.customStyle);
+      setFontFamily(state.settings.fontFamily ?? '');
     }
   }, [state.settings]);
 
@@ -49,6 +55,33 @@ export function OptionsModal(): ReactElement {
     }
     void loadStyles();
   }, [dispatch, t]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFonts() {
+      setFontLoadState('loading');
+      try {
+        const { fonts } = await window.electronAPI.listSystemFonts();
+        if (cancelled) return;
+        const sortedFonts = [...new Set(fonts.map((font) => font.trim()).filter(Boolean))].sort(
+          (a, b) => a.localeCompare(b),
+        );
+        setAvailableFonts(sortedFonts);
+        setFontLoadState(sortedFonts.length > 0 ? 'ready' : 'empty');
+      } catch {
+        if (!cancelled) {
+          setAvailableFonts([]);
+          setFontLoadState('error');
+        }
+      }
+    }
+
+    void loadFonts();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLaunchOnStartupChange = (e: ChangeEvent<HTMLInputElement>) => {
     const checked = e.target.checked;
@@ -83,6 +116,15 @@ export function OptionsModal(): ReactElement {
     dispatch({
       type: 'UPDATE_SETTINGS',
       settings: { customStyle: value },
+    });
+  };
+
+  const handleFontFamilyChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    setFontFamily(value);
+    dispatch({
+      type: 'UPDATE_SETTINGS',
+      settings: { fontFamily: value },
     });
   };
 
@@ -139,6 +181,45 @@ export function OptionsModal(): ReactElement {
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="modal-row modal-row-font">
+        <label htmlFor="system-font-family">{t('modals.options.font')}:</label>
+        <div className="modal-field">
+          <select
+            id="system-font-family"
+            value={fontFamily}
+            onChange={handleFontFamilyChange}
+            disabled={fontLoadState === 'loading'}
+            aria-describedby={fontLoadState === 'ready' ? undefined : 'system-font-status'}
+            style={fontFamily ? { fontFamily } : undefined}
+          >
+            <option value="">{t('modals.options.fontSystem')}</option>
+            {fontFamily && !availableFonts.includes(fontFamily) && (
+              <option value={fontFamily}>{fontFamily}</option>
+            )}
+            {availableFonts.map((font) => (
+              <option key={font} value={font} style={{ fontFamily: font }}>
+                {font}
+              </option>
+            ))}
+          </select>
+          {fontLoadState === 'loading' && (
+            <span id="system-font-status" className="modal-field-status" role="status">
+              {t('modals.options.fontLoading')}
+            </span>
+          )}
+          {fontLoadState === 'empty' && (
+            <span id="system-font-status" className="modal-field-status" role="status">
+              {t('modals.options.fontEmpty')}
+            </span>
+          )}
+          {fontLoadState === 'error' && (
+            <span id="system-font-status" className="modal-field-status error" role="alert">
+              {t('modals.options.fontLoadFailed')}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="modal-row">

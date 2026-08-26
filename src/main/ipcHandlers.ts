@@ -15,6 +15,7 @@ import {
   saveProfile,
   saveSettings,
 } from './configStore';
+import { listSystemFonts } from './fontService';
 import { registerGlobalHotkey } from './hotkey';
 import { getIcon } from './iconService';
 import { launchProgram } from './launcher';
@@ -257,6 +258,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.STYLES_LOAD, (_, styleName: string) => {
     const content = loadCustomStyleContent(styleName);
     return { content };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.FONTS_LIST, async () => {
+    try {
+      return { fonts: await listSystemFonts() };
+    } catch (error) {
+      log.error('Failed to list system fonts', { scope: 'ipcHandlers', error });
+      throw error;
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.DIALOG_SHOW_ERROR, async (_, title: string, content: string) => {

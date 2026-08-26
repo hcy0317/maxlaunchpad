@@ -75,7 +75,9 @@ function validateIconAsset(asset: IconAsset): void {
 
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    asar: {
+      unpackDir: path.join('.webpack', 'main', 'native_modules'),
+    },
     icon: './out/icons/icon',
     appBundleId: 'com.awesomedog.maxlaunchpad',
     name: 'MaxLaunchpad',

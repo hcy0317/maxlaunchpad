@@ -15,6 +15,7 @@ import { useCompactWindowHeight } from './hooks/useCompactWindowHeight';
 import { useConfigSync } from './hooks/useConfigSync';
 import { useCustomStyle } from './hooks/useCustomStyle';
 import { useErrorDialog } from './hooks/useErrorDialog';
+import { useFontFamily } from './hooks/useFontFamily';
 import { useKeyboardNav } from './hooks/useKeyboardNav';
 import { useTheme } from './hooks/useTheme';
 import { useWindowBehavior } from './hooks/useWindowBehavior';
@@ -39,6 +40,8 @@ function AppContent() {
   useKeyboardNav();
 
   useTheme();
+
+  useFontFamily();
 
   useCustomStyle();
 

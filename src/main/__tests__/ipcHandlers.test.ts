@@ -11,6 +11,7 @@ const mockMinimizeMainWindow = jest.fn();
 const mockResizeMainWindowByHeightDelta = jest.fn();
 const mockGetMainWindow = jest.fn();
 const mockKeepMainWindowVisibleDuringNativeDialog = jest.fn((task: () => unknown) => task());
+const mockListSystemFonts = jest.fn();
 
 jest.mock('electron', () => ({
   app: {
@@ -63,6 +64,7 @@ jest.mock('../configStore', () => ({
   saveSettings: jest.fn(),
 }));
 jest.mock('../hotkey', () => ({ registerGlobalHotkey: jest.fn() }));
+jest.mock('../fontService', () => ({ listSystemFonts: mockListSystemFonts }));
 jest.mock('../iconService', () => ({ getIcon: jest.fn() }));
 jest.mock('../launcher', () => ({ launchProgram: jest.fn() }));
 jest.mock('../logger', () => ({ error: jest.fn() }));
@@ -71,6 +73,7 @@ describe('registerIpcHandlers', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockGetMainWindow.mockReturnValue(null);
+    mockListSystemFonts.mockResolvedValue(['Arial', 'Segoe UI']);
     mockKeepMainWindowVisibleDuringNativeDialog.mockImplementation((task: () => unknown) => task());
     (dialog.showOpenDialog as jest.Mock).mockResolvedValue({ canceled: true, filePaths: [] });
     (dialog.showSaveDialog as jest.Mock).mockResolvedValue({ canceled: true });
@@ -154,6 +157,14 @@ describe('registerIpcHandlers', () => {
     await selectFolderHandler!(undefined, 'Select Folder');
 
     expect(mockKeepMainWindowVisibleDuringNativeDialog).toHaveBeenCalledTimes(2);
+  });
+
+  it('exposes the installed system font families through IPC', async () => {
+    const fontListHandler = mockIpcHandlers.get(IPC_CHANNELS.FONTS_LIST);
+
+    expect(fontListHandler).toBeDefined();
+    await expect(fontListHandler!(undefined)).resolves.toEqual({ fonts: ['Arial', 'Segoe UI'] });
+    expect(mockListSystemFonts).toHaveBeenCalledTimes(1);
   });
 
   it('parents edit-key file and folder pickers to a live main window', async () => {

@@ -39,6 +39,9 @@ export const IPC_CHANNELS = {
   STYLES_LIST: 'styles:list',
   STYLES_LOAD: 'styles:load',
 
+  // System fonts
+  FONTS_LIST: 'fonts:list',
+
   // Shortcut parsing (Windows .lnk)
   SHORTCUT_PARSE: 'shortcut:parse',
 
