@@ -49,6 +49,13 @@ export const WindowSizeSchema = z
   })
   .strip();
 
+export const WindowSizeRatioSchema = z
+  .object({
+    width: z.number().positive().max(1),
+    height: z.number().positive().max(1),
+  })
+  .strip();
+
 // Hide elements schema
 export const HideElementsSchema = z
   .object({
@@ -80,7 +87,8 @@ export const AppSettingsSchema = z
     theme: z.enum(['light', 'dark', 'system']),
     language: AppLanguageSchema.optional(),
     customStyle: z.string(),
-    windowSize: WindowSizeSchema,
+    windowSizeRatio: WindowSizeRatioSchema,
+    windowSize: WindowSizeSchema.optional(),
     windowScaleBasis: WindowSizeSchema.optional(),
     hideElements: HideElementsSchema,
   })

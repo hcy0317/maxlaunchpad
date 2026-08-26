@@ -2,9 +2,11 @@ import {
   constrainWindowSizeToWorkArea,
   getCenteredWindowBounds,
   getCenteredWindowPosition,
-  getDisplayAwareWindowSize,
-  getDisplayScaleFactor,
-  getWindowSizeInScaleBasis,
+  getLegacyDisplayAwareWindowSize,
+  getLegacyDisplayScaleFactor,
+  getWindowSizeFromRatio,
+  getWindowSizeRatio,
+  getWindowZoomFactor,
   normalizeWindowSizeToWorkArea,
   shouldAllowWindowMovement,
   shouldAllowWindowResize,
@@ -48,16 +50,69 @@ describe('windowBehavior', () => {
     ).toEqual({ width: 480, height: 120 });
   });
 
-  it('scales a window with the display work area and restores its basis size', () => {
+  it('converts a legacy display-work-area anchor for one-time migration', () => {
     const scaleBasis = { width: 3072, height: 1728 };
     const targetWorkArea = { width: 1920, height: 1080 };
     const basisSize = { width: 1378, height: 771 };
 
-    expect(getDisplayScaleFactor(scaleBasis, targetWorkArea)).toBe(0.625);
+    expect(getLegacyDisplayScaleFactor(scaleBasis, targetWorkArea)).toBe(0.625);
 
-    const displaySize = getDisplayAwareWindowSize(basisSize, scaleBasis, targetWorkArea);
+    const displaySize = getLegacyDisplayAwareWindowSize(basisSize, scaleBasis, targetWorkArea);
     expect(displaySize).toEqual({ width: 861, height: 482 });
-    expect(getWindowSizeInScaleBasis(displaySize, scaleBasis, targetWorkArea)).toEqual(basisSize);
+  });
+
+  it('keeps window and UI proportions stable across resolution and DPI combinations', () => {
+    const ratio = getWindowSizeRatio({ width: 1247, height: 732 }, { width: 2458, height: 1383 });
+    expect(ratio.width).toBeCloseTo(1247 / 2458, 10);
+    expect(ratio.height).toBeCloseTo(732 / 1383, 10);
+
+    for (const display of [
+      {
+        bounds: { width: 2458, height: 1383 },
+        workArea: { width: 2400, height: 1300 },
+        scaleFactor: 1.5625,
+      },
+      {
+        bounds: { width: 3072, height: 1728 },
+        workArea: { width: 3000, height: 1650 },
+        scaleFactor: 1.25,
+      },
+      {
+        bounds: { width: 1920, height: 1080 },
+        workArea: { width: 1840, height: 1000 },
+        scaleFactor: 1,
+      },
+      {
+        bounds: { width: 3440, height: 1440 },
+        workArea: { width: 3300, height: 1320 },
+        scaleFactor: 1.25,
+      },
+      {
+        bounds: { width: 1600, height: 1200 },
+        workArea: { width: 1500, height: 1100 },
+        scaleFactor: 1,
+      },
+    ]) {
+      const size = getWindowSizeFromRatio(ratio, display.bounds, display.workArea);
+      const zoomFactor = getWindowZoomFactor(size);
+      const physicalDisplayWidth = display.bounds.width * display.scaleFactor;
+      const physicalWindowWidth = size.width * display.scaleFactor;
+      const physicalDesignPixel = zoomFactor * display.scaleFactor;
+
+      expect(size.width).toBe(Math.round(ratio.width * display.bounds.width));
+      expect(size.height).toBe(Math.round(ratio.height * display.bounds.height));
+      const actualWidthRatio = size.width / display.bounds.width;
+      const actualHeightRatio = size.height / display.bounds.height;
+      expect(Math.abs(actualWidthRatio - ratio.width)).toBeLessThanOrEqual(
+        0.5 / display.bounds.width + Number.EPSILON,
+      );
+      expect(Math.abs(actualHeightRatio - ratio.height)).toBeLessThanOrEqual(
+        0.5 / display.bounds.height + Number.EPSILON,
+      );
+      expect(physicalWindowWidth / physicalDisplayWidth).toBeCloseTo(actualWidthRatio, 12);
+      expect(physicalDesignPixel / physicalDisplayWidth).toBeCloseTo(actualWidthRatio / 1000, 12);
+      expect(physicalDesignPixel / physicalWindowWidth).toBeCloseTo(1 / 1000, 12);
+    }
   });
 
   it('keeps a configured work-area-filling size after normal work-area clamping', () => {

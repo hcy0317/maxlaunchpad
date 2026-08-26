@@ -43,6 +43,11 @@ export interface WindowSize {
   height: number;
 }
 
+export interface WindowSizeRatio {
+  width: number;
+  height: number;
+}
+
 // Hide elements configuration
 export interface HideElements {
   menu: boolean; // Hide menu bar until the configured reveal key is pressed
@@ -70,7 +75,8 @@ export interface AppSettings {
   theme: 'light' | 'dark' | 'system';
   language?: AppLanguage;
   customStyle: string; // Style name without ".css", default 'default'
-  windowSize: WindowSize; // User-customized window size
-  windowScaleBasis?: WindowSize; // Display work area where windowSize and 1x UI scale were established
+  windowSizeRatio?: WindowSizeRatio; // Canonical window-to-display ratios
+  windowSize?: WindowSize; // Legacy migration source
+  windowScaleBasis?: WindowSize; // Legacy migration source
   hideElements: HideElements; // Hide elements configuration
 }

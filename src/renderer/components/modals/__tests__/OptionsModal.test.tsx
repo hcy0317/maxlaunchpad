@@ -18,7 +18,7 @@ const settings: AppSettings = {
   theme: 'dark',
   language: 'zh-CN',
   customStyle: 'modern',
-  windowSize: { width: 1000, height: 600 },
+  windowSizeRatio: { width: 1000 / 1920, height: 600 / 1080 },
   hideElements: { ...DEFAULT_HIDE_ELEMENTS },
 };
 
@@ -158,10 +158,7 @@ describe('OptionsModal', () => {
     const { container } = render(<OptionsModal />);
     const languageRow = screen.getByText('语言:').closest('.modal-row');
     const languageSelect = languageRow?.querySelector('select') as HTMLSelectElement;
-    const valueSetter = Object.getOwnPropertyDescriptor(
-      HTMLSelectElement.prototype,
-      'value',
-    )?.set;
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
 
     expect(valueSetter).toBeDefined();
 

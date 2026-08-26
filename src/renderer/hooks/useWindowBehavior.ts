@@ -35,9 +35,9 @@ export function useWindowBehavior() {
     });
   }, [dispatch]);
 
-  // Handle window resize to update settings (will be saved by useConfigSync)
+  // Handle window ratio changes (will be saved by useConfigSync)
   useEffect(() => {
-    return window.electronAPI.onWindowResized((width, height) => {
+    return window.electronAPI.onWindowSizeRatioChanged((width, height) => {
       const settings = settingsRef.current;
       if (settings) {
         if (
@@ -48,11 +48,11 @@ export function useWindowBehavior() {
         ) {
           return;
         }
-        const currentSize = settings.windowSize;
-        if (currentSize.width !== width || currentSize.height !== height) {
+        const currentRatio = settings.windowSizeRatio;
+        if (!currentRatio || currentRatio.width !== width || currentRatio.height !== height) {
           dispatch({
             type: 'UPDATE_SETTINGS',
-            settings: { windowSize: { width, height } },
+            settings: { windowSizeRatio: { width, height } },
           });
         }
       }

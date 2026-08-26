@@ -1,22 +1,37 @@
 const browserWindowMock = jest.fn();
 const loadSettingsMock = jest.fn();
 const saveSettingsMock = jest.fn();
+type DisplayMock = {
+  id: number;
+  scaleFactor: number;
+  bounds: { x: number; y: number; width: number; height: number };
+  workArea: { x: number; y: number; width: number; height: number };
+};
 const getCursorScreenPointMock = jest.fn(() => ({ x: 5000, y: 100 }));
-const getDisplayNearestPointMock = jest.fn(() => ({
-  id: 2,
-  scaleFactor: 1.5,
-  workArea: { x: 0, y: 0, width: 1920, height: 1080 },
-}));
-const getPrimaryDisplayMock = jest.fn(() => ({
-  id: 1,
-  scaleFactor: 1,
-  workArea: { x: 4000, y: 0, width: 1920, height: 1080 },
-}));
-const getDisplayMatchingMock = jest.fn(() => ({
-  id: 2,
-  scaleFactor: 1.5,
-  workArea: { x: 0, y: 0, width: 1920, height: 1080 },
-}));
+const getDisplayNearestPointMock = jest.fn(
+  (): DisplayMock => ({
+    id: 2,
+    scaleFactor: 1.5,
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+  }),
+);
+const getPrimaryDisplayMock = jest.fn(
+  (): DisplayMock => ({
+    id: 1,
+    scaleFactor: 1,
+    bounds: { x: 4000, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 4000, y: 0, width: 1920, height: 1080 },
+  }),
+);
+const getDisplayMatchingMock = jest.fn(
+  (): DisplayMock => ({
+    id: 2,
+    scaleFactor: 1.5,
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+  }),
+);
 const screenOnMock = jest.fn();
 const screenOffMock = jest.fn();
 const loadUrlMock = jest.fn();
@@ -63,6 +78,7 @@ jest.mock('../configStore', () => ({
 
 jest.mock('../logger', () => ({
   error: jest.fn(),
+  info: jest.fn(),
 }));
 
 describe('createMainWindow', () => {
@@ -87,16 +103,19 @@ describe('createMainWindow', () => {
     getDisplayNearestPointMock.mockReturnValue({
       id: 2,
       scaleFactor: 1.5,
+      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
       workArea: { x: 0, y: 0, width: 1920, height: 1080 },
     });
     getPrimaryDisplayMock.mockReturnValue({
       id: 1,
       scaleFactor: 1,
+      bounds: { x: 4000, y: 0, width: 1920, height: 1080 },
       workArea: { x: 4000, y: 0, width: 1920, height: 1080 },
     });
     getDisplayMatchingMock.mockReturnValue({
       id: 2,
       scaleFactor: 1.5,
+      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
       workArea: { x: 0, y: 0, width: 1920, height: 1080 },
     });
     loadUrlMock.mockClear();
@@ -203,6 +222,7 @@ describe('createMainWindow', () => {
     getDisplayNearestPointMock.mockReturnValue({
       id: 1,
       scaleFactor: 2,
+      bounds: { x: 0, y: 0, width: 2048, height: 1080 },
       workArea: { x: 0, y: 0, width: 2048, height: 1080 },
     });
     const { createMainWindow, showMainWindow } = await import('../window');
@@ -220,8 +240,7 @@ describe('createMainWindow', () => {
 
   it('opens the window and renderer at the saved display-work-area proportion', async () => {
     loadSettingsMock.mockReturnValue({
-      windowSize: { width: 1000, height: 600 },
-      windowScaleBasis: { width: 3072, height: 1728 },
+      windowSizeRatio: { width: 1000 / 3072, height: 600 / 1728 },
       lockWindowCenter: true,
     });
     const { createMainWindow } = await import('../window');
@@ -237,7 +256,38 @@ describe('createMainWindow', () => {
     );
   });
 
-  it('repairs an invalid display scale basis without changing the current layout', async () => {
+  it('uses display bounds for ratios while reserving workArea for placement', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSizeRatio: { width: 0.5, height: 0.5 },
+      lockWindowCenter: true,
+    });
+    getDisplayNearestPointMock.mockReturnValue({
+      id: 2,
+      scaleFactor: 1,
+      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+      workArea: { x: 100, y: 50, width: 1600, height: 900 },
+    });
+    const { createMainWindow, showMainWindow } = await import('../window');
+
+    createMainWindow();
+    showMainWindow();
+
+    expect(browserWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        width: 960,
+        height: 540,
+        webPreferences: expect.objectContaining({ zoomFactor: 0.96 }),
+      }),
+    );
+    expect(setBoundsMock).toHaveBeenLastCalledWith({
+      x: 420,
+      y: 230,
+      width: 960,
+      height: 540,
+    });
+  });
+
+  it('migrates an invalid legacy scale basis without changing the current layout', async () => {
     loadSettingsMock.mockReturnValue({
       windowSize: { width: 720, height: 480 },
       windowScaleBasis: { width: 0, height: Number.NaN },
@@ -251,18 +301,17 @@ describe('createMainWindow', () => {
       expect.objectContaining({
         width: 720,
         height: 480,
-        webPreferences: expect.objectContaining({ zoomFactor: 1 }),
+        webPreferences: expect.objectContaining({ zoomFactor: 0.72 }),
       }),
     );
     expect(saveSettingsMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        windowSize: { width: 720, height: 480 },
-        windowScaleBasis: { width: 1920, height: 1080 },
+        windowSizeRatio: { width: 720 / 1920, height: 480 / 1080 },
       }),
     );
   });
 
-  it('keeps the configured minimum size even when every keyboard row is visible', async () => {
+  it('migrates a configured minimum size without changing its visual size', async () => {
     loadSettingsMock.mockReturnValue({
       windowSize: { width: 482, height: 121 },
       windowScaleBasis: { width: 2458, height: 1383 },
@@ -281,6 +330,7 @@ describe('createMainWindow', () => {
     getDisplayNearestPointMock.mockReturnValue({
       id: 2,
       scaleFactor: 1.25,
+      bounds: { x: 0, y: 0, width: 2458, height: 1383 },
       workArea: { x: 0, y: 0, width: 2458, height: 1383 },
     });
     const { createMainWindow } = await import('../window');
@@ -290,7 +340,41 @@ describe('createMainWindow', () => {
     expect(browserWindowMock).toHaveBeenCalledWith(
       expect.objectContaining({ width: 482, height: 121 }),
     );
-    expect(saveSettingsMock).not.toHaveBeenCalled();
+    expect(saveSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        windowSizeRatio: { width: 482 / 2458, height: 121 / 1383 },
+      }),
+    );
+  });
+
+  it('migrates the live legacy anchor into an equivalent direct display ratio', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSize: { width: 1247, height: 732 },
+      windowScaleBasis: { width: 2458, height: 1383 },
+      lockWindowCenter: true,
+    });
+    getDisplayNearestPointMock.mockReturnValue({
+      id: 2,
+      scaleFactor: 1.25,
+      bounds: { x: 0, y: 0, width: 3072, height: 1728 },
+      workArea: { x: 0, y: 0, width: 3072, height: 1728 },
+    });
+    const { createMainWindow } = await import('../window');
+
+    createMainWindow();
+
+    expect(browserWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        width: 1558,
+        height: 915,
+        webPreferences: expect.objectContaining({ zoomFactor: 1.558 }),
+      }),
+    );
+    expect(saveSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        windowSizeRatio: { width: 1558 / 3072, height: 915 / 1728 },
+      }),
+    );
   });
 
   it('keeps a user work-area-filling size after normal bounds clamping', async () => {
@@ -302,6 +386,7 @@ describe('createMainWindow', () => {
     getDisplayNearestPointMock.mockReturnValue({
       id: 2,
       scaleFactor: 1,
+      bounds: { x: 0, y: 0, width: 2048, height: 896 },
       workArea: { x: 0, y: 0, width: 2048, height: 896 },
     });
     const { createMainWindow } = await import('../window');
@@ -312,14 +397,15 @@ describe('createMainWindow', () => {
       expect.objectContaining({ width: 2016, height: 864 }),
     );
     expect(saveSettingsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ windowSize: { width: 2016, height: 864 } }),
+      expect.objectContaining({
+        windowSizeRatio: { width: 2016 / 2048, height: 864 / 896 },
+      }),
     );
   });
 
   it('reapplies the saved display proportion whenever a locked window is shown', async () => {
     loadSettingsMock.mockReturnValue({
-      windowSize: { width: 1378, height: 771 },
-      windowScaleBasis: { width: 3072, height: 1728 },
+      windowSizeRatio: { width: 1378 / 3072, height: 771 / 1728 },
       lockWindowCenter: true,
     });
     const { createMainWindow, showMainWindow } = await import('../window');
@@ -327,7 +413,7 @@ describe('createMainWindow', () => {
     createMainWindow();
     showMainWindow();
 
-    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.625);
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.861);
     expect(setBoundsMock).toHaveBeenLastCalledWith({
       x: 530,
       y: 299,
@@ -338,18 +424,19 @@ describe('createMainWindow', () => {
 
   it('restores the original layout after a display metrics round trip', async () => {
     loadSettingsMock.mockReturnValue({
-      windowSize: { width: 1378, height: 771 },
-      windowScaleBasis: { width: 3072, height: 1728 },
+      windowSizeRatio: { width: 1378 / 3072, height: 771 / 1728 },
       lockWindowCenter: true,
     });
     getDisplayNearestPointMock.mockReturnValue({
       id: 2,
       scaleFactor: 1.25,
+      bounds: { x: 0, y: 0, width: 3072, height: 1728 },
       workArea: { x: 0, y: 0, width: 3072, height: 1728 },
     });
     getDisplayMatchingMock.mockReturnValue({
       id: 2,
       scaleFactor: 1.25,
+      bounds: { x: 0, y: 0, width: 3072, height: 1728 },
       workArea: { x: 0, y: 0, width: 3072, height: 1728 },
     });
     getSizeMock.mockReturnValue([1378, 771]);
@@ -361,12 +448,16 @@ describe('createMainWindow', () => {
     )?.[1] as ((event: unknown, display: unknown, changedMetrics: string[]) => void) | undefined;
     expect(metricsHandler).toBeDefined();
 
-    metricsHandler!({}, { id: 2, workArea: { x: 0, y: 0, width: 1920, height: 1080 } }, [
-      'bounds',
-      'workArea',
-      'scaleFactor',
-    ]);
-    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.625);
+    metricsHandler!(
+      {},
+      {
+        id: 2,
+        bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+        workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+      },
+      ['bounds', 'workArea', 'scaleFactor'],
+    );
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.861);
     expect(setBoundsMock).toHaveBeenLastCalledWith({
       x: 530,
       y: 299,
@@ -374,12 +465,16 @@ describe('createMainWindow', () => {
       height: 482,
     });
 
-    metricsHandler!({}, { id: 2, workArea: { x: 0, y: 0, width: 3072, height: 1728 } }, [
-      'bounds',
-      'workArea',
-      'scaleFactor',
-    ]);
-    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(1);
+    metricsHandler!(
+      {},
+      {
+        id: 2,
+        bounds: { x: 0, y: 0, width: 3072, height: 1728 },
+        workArea: { x: 0, y: 0, width: 3072, height: 1728 },
+      },
+      ['bounds', 'workArea', 'scaleFactor'],
+    );
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(1.378);
     expect(setBoundsMock).toHaveBeenLastCalledWith({
       x: 847,
       y: 479,
@@ -392,18 +487,19 @@ describe('createMainWindow', () => {
     jest.useFakeTimers();
     try {
       loadSettingsMock.mockReturnValue({
-        windowSize: { width: 1378, height: 771 },
-        windowScaleBasis: { width: 3072, height: 1728 },
+        windowSizeRatio: { width: 1378 / 3072, height: 771 / 1728 },
         lockWindowCenter: true,
       });
       getDisplayNearestPointMock.mockReturnValue({
         id: 2,
         scaleFactor: 1.25,
+        bounds: { x: 0, y: 0, width: 3072, height: 1728 },
         workArea: { x: 0, y: 0, width: 3072, height: 1728 },
       });
       getDisplayMatchingMock.mockReturnValue({
         id: 2,
         scaleFactor: 1.25,
+        bounds: { x: 0, y: 0, width: 3072, height: 1728 },
         workArea: { x: 0, y: 0, width: 3072, height: 1728 },
       });
       getSizeMock.mockReturnValue([1378, 771]);
@@ -422,6 +518,7 @@ describe('createMainWindow', () => {
       const compactDisplay = {
         id: 2,
         scaleFactor: 1.5,
+        bounds: { x: 0, y: 0, width: 1920, height: 1080 },
         workArea: { x: 0, y: 0, width: 1920, height: 1080 },
       };
       getDisplayMatchingMock.mockReturnValue(compactDisplay);
@@ -444,6 +541,7 @@ describe('createMainWindow', () => {
       const basisDisplay = {
         id: 2,
         scaleFactor: 1.25,
+        bounds: { x: 0, y: 0, width: 3072, height: 1728 },
         workArea: { x: 0, y: 0, width: 3072, height: 1728 },
       };
       getDisplayMatchingMock.mockReturnValue(basisDisplay);
@@ -463,13 +561,13 @@ describe('createMainWindow', () => {
 
   it('adapts an unlocked window when it moves to a differently scaled display', async () => {
     loadSettingsMock.mockReturnValue({
-      windowSize: { width: 1378, height: 771 },
-      windowScaleBasis: { width: 3072, height: 1728 },
+      windowSizeRatio: { width: 1378 / 3072, height: 771 / 1728 },
       lockWindowCenter: false,
     });
     getDisplayNearestPointMock.mockReturnValue({
       id: 1,
       scaleFactor: 1.25,
+      bounds: { x: 0, y: 0, width: 3072, height: 1728 },
       workArea: { x: 0, y: 0, width: 3072, height: 1728 },
     });
     const { createMainWindow } = await import('../window');
@@ -488,7 +586,7 @@ describe('createMainWindow', () => {
     resizeHandler!();
     movedHandler!();
 
-    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.625);
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.861);
     expect(setBoundsMock).toHaveBeenLastCalledWith({
       x: 120,
       y: 140,
@@ -505,16 +603,15 @@ describe('createMainWindow', () => {
 
     expect(setBoundsMock).toHaveBeenCalledWith({
       x: 600,
-      y: 360,
+      y: 343,
       width: 720,
-      height: 360,
+      height: 394,
     });
   });
 
-  it('scales compact-layout height deltas without changing the saved basis', async () => {
+  it('scales compact-layout height deltas without changing the saved width ratio', async () => {
     loadSettingsMock.mockReturnValue({
-      windowSize: { width: 1378, height: 771 },
-      windowScaleBasis: { width: 3072, height: 1728 },
+      windowSizeRatio: { width: 1378 / 3072, height: 771 / 1728 },
       lockWindowCenter: true,
     });
     getSizeMock.mockReturnValue([861, 482]);
@@ -526,11 +623,15 @@ describe('createMainWindow', () => {
 
     expect(setBoundsMock).toHaveBeenLastCalledWith({
       x: 530,
-      y: 337,
+      y: 351,
       width: 861,
-      height: 407,
+      height: 379,
     });
-    expect(webContentsSendMock).toHaveBeenLastCalledWith(IPC_CHANNELS.WINDOW_RESIZED, 1378, 651);
+    expect(webContentsSendMock).toHaveBeenLastCalledWith(
+      IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED,
+      861 / 1920,
+      379 / 1080,
+    );
   });
 
   it('reports hidden-row programmatic resizes so compact window sizes persist', async () => {
@@ -547,7 +648,11 @@ describe('createMainWindow', () => {
     getSizeMock.mockReturnValue([720, 360]);
     resizeHandler!();
 
-    expect(webContentsSendMock).toHaveBeenCalledWith(IPC_CHANNELS.WINDOW_RESIZED, 720, 360);
+    expect(webContentsSendMock).toHaveBeenCalledWith(
+      IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED,
+      720 / 1920,
+      394 / 1080,
+    );
 
     const willResizeHandler = onMock.mock.calls.find(
       ([eventName]) => eventName === 'will-resize',
@@ -557,7 +662,11 @@ describe('createMainWindow', () => {
     getSizeMock.mockReturnValue([720, 500]);
     resizeHandler!();
 
-    expect(webContentsSendMock).toHaveBeenCalledWith(IPC_CHANNELS.WINDOW_RESIZED, 720, 500);
+    expect(webContentsSendMock).toHaveBeenCalledWith(
+      IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED,
+      720 / 1920,
+      500 / 1080,
+    );
   });
 
   it('releases programmatic resize suppression for later resize-only platform input', async () => {
@@ -580,7 +689,11 @@ describe('createMainWindow', () => {
       resizeHandler!();
       jest.advanceTimersByTime(150);
 
-      expect(webContentsSendMock).toHaveBeenCalledWith(IPC_CHANNELS.WINDOW_RESIZED, 800, 500);
+      expect(webContentsSendMock).toHaveBeenCalledWith(
+        IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED,
+        800 / 1920,
+        500 / 1080,
+      );
     } finally {
       jest.runOnlyPendingTimers();
       jest.useRealTimers();
@@ -592,18 +705,19 @@ describe('createMainWindow', () => {
     jest.doMock('../platform', () => ({ IS_LINUX: true }));
     try {
       loadSettingsMock.mockReturnValue({
-        windowSize: { width: 1378, height: 771 },
-        windowScaleBasis: { width: 3072, height: 1728 },
+        windowSizeRatio: { width: 1378 / 3072, height: 771 / 1728 },
         lockWindowCenter: true,
       });
       getDisplayNearestPointMock.mockReturnValue({
         id: 2,
         scaleFactor: 1.25,
+        bounds: { x: 0, y: 0, width: 3072, height: 1728 },
         workArea: { x: 0, y: 0, width: 3072, height: 1728 },
       });
       const compactDisplay = {
         id: 2,
         scaleFactor: 1.5,
+        bounds: { x: 0, y: 0, width: 1920, height: 1080 },
         workArea: { x: 0, y: 0, width: 1920, height: 1080 },
       };
       getDisplayMatchingMock.mockReturnValue(compactDisplay);
@@ -626,7 +740,11 @@ describe('createMainWindow', () => {
       resizeHandler!();
       jest.advanceTimersByTime(1000);
 
-      expect(webContentsSendMock).toHaveBeenCalledWith(IPC_CHANNELS.WINDOW_RESIZED, 1440, 800);
+      expect(webContentsSendMock).toHaveBeenCalledWith(
+        IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED,
+        900 / 1920,
+        500 / 1080,
+      );
     } finally {
       jest.dontMock('../platform');
       jest.runOnlyPendingTimers();
@@ -634,10 +752,9 @@ describe('createMainWindow', () => {
     }
   });
 
-  it('persists manual resize dimensions in the saved scale basis', async () => {
+  it('persists manual resize dimensions as display ratios', async () => {
     loadSettingsMock.mockReturnValue({
-      windowSize: { width: 1378, height: 771 },
-      windowScaleBasis: { width: 3072, height: 1728 },
+      windowSizeRatio: { width: 1378 / 3072, height: 771 / 1728 },
       lockWindowCenter: true,
     });
     const { IPC_CHANNELS } = await import('../../shared/ipcChannels');
@@ -657,7 +774,48 @@ describe('createMainWindow', () => {
     getSizeMock.mockReturnValue([900, 500]);
     resizeHandler!();
 
-    expect(webContentsSendMock).toHaveBeenLastCalledWith(IPC_CHANNELS.WINDOW_RESIZED, 1440, 800);
+    expect(webContentsSendMock).toHaveBeenLastCalledWith(
+      IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED,
+      900 / 1920,
+      500 / 1080,
+    );
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.9);
+  });
+
+  it('persists and applies a safely clamped manual resize for unlocked windows', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSizeRatio: { width: 0.5, height: 0.5 },
+      lockWindowCenter: false,
+    });
+    const { IPC_CHANNELS } = await import('../../shared/ipcChannels');
+    const { createMainWindow } = await import('../window');
+
+    createMainWindow();
+    const willResizeHandler = onMock.mock.calls.find(
+      ([eventName]) => eventName === 'will-resize',
+    )?.[1] as ((event: { preventDefault: () => void }) => void) | undefined;
+    const resizeHandler = onMock.mock.calls.find(([eventName]) => eventName === 'resize')?.[1] as
+      | (() => void)
+      | undefined;
+    expect(willResizeHandler).toBeDefined();
+    expect(resizeHandler).toBeDefined();
+
+    willResizeHandler!({ preventDefault: jest.fn() });
+    getSizeMock.mockReturnValue([2000, 1100]);
+    resizeHandler!();
+
+    expect(setBoundsMock).toHaveBeenLastCalledWith({
+      x: 120,
+      y: 140,
+      width: 1888,
+      height: 1048,
+    });
+    expect(webContentsSendMock).toHaveBeenLastCalledWith(
+      IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED,
+      1888 / 1920,
+      1048 / 1080,
+    );
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(1.888);
   });
 
   it('keeps blur auto-hide suspended while renderer modals are mounted', async () => {

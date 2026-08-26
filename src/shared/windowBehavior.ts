@@ -1,5 +1,5 @@
-import { DEFAULT_WINDOW_SIZE } from './constants';
-import type { WindowSize } from './types';
+import { DEFAULT_WINDOW_SIZE, WINDOW_UI_DESIGN_WIDTH } from './constants';
+import type { WindowSize, WindowSizeRatio } from './types';
 
 export interface WorkArea {
   x: number;
@@ -50,7 +50,8 @@ export function constrainWindowSizeToWorkArea(
   };
 }
 
-export function getDisplayScaleFactor(
+// Legacy absolute-size anchors are read once during migration and never persisted again.
+export function getLegacyDisplayScaleFactor(
   scaleBasis: Pick<WorkArea, 'width' | 'height'>,
   targetWorkArea: Pick<WorkArea, 'width' | 'height'>,
 ): number {
@@ -73,13 +74,13 @@ export function getDisplayScaleFactor(
   );
 }
 
-export function getDisplayAwareWindowSize(
+export function getLegacyDisplayAwareWindowSize(
   size: WindowSize,
   scaleBasis: Pick<WorkArea, 'width' | 'height'>,
   targetWorkArea: Pick<WorkArea, 'width' | 'height'>,
 ): WindowSize {
   const basisSize = constrainWindowSizeToWorkArea(size, scaleBasis);
-  const scaleFactor = getDisplayScaleFactor(scaleBasis, targetWorkArea);
+  const scaleFactor = getLegacyDisplayScaleFactor(scaleBasis, targetWorkArea);
 
   return constrainWindowSizeToWorkArea(
     {
@@ -90,20 +91,34 @@ export function getDisplayAwareWindowSize(
   );
 }
 
-export function getWindowSizeInScaleBasis(
+export function getWindowSizeRatio(
   size: WindowSize,
-  scaleBasis: Pick<WorkArea, 'width' | 'height'>,
-  currentWorkArea: Pick<WorkArea, 'width' | 'height'>,
-): WindowSize {
-  const scaleFactor = getDisplayScaleFactor(scaleBasis, currentWorkArea);
+  displayBounds: Pick<WorkArea, 'width' | 'height'>,
+): WindowSizeRatio {
+  return {
+    width: size.width / Math.max(1, displayBounds.width),
+    height: size.height / Math.max(1, displayBounds.height),
+  };
+}
 
+export function getWindowSizeFromRatio(
+  ratio: WindowSizeRatio,
+  displayBounds: Pick<WorkArea, 'width' | 'height'>,
+  workArea: Pick<WorkArea, 'width' | 'height'>,
+): WindowSize {
   return constrainWindowSizeToWorkArea(
     {
-      width: size.width / scaleFactor,
-      height: size.height / scaleFactor,
+      width: ratio.width * displayBounds.width,
+      height: ratio.height * displayBounds.height,
     },
-    scaleBasis,
+    workArea,
   );
+}
+
+export function getWindowZoomFactor(size: WindowSize): number {
+  // This is a design coordinate, not persisted window state. Scaling from the actual
+  // window width keeps text and icons proportional to each user-defined window ratio.
+  return Math.max(0.01, size.width / WINDOW_UI_DESIGN_WIDTH);
 }
 
 function isFiniteWindowSize(size: WindowSize | null | undefined): size is WindowSize {

@@ -20,7 +20,7 @@ const settings: AppSettings = {
   theme: 'system',
   language: 'zh-CN',
   customStyle: 'modern',
-  windowSize: { width: 1000, height: 600 },
+  windowSizeRatio: { width: 1000 / 1920, height: 600 / 1080 },
   hideElements: { ...DEFAULT_HIDE_ELEMENTS },
 };
 
@@ -58,7 +58,7 @@ describe('app config load contract', () => {
       showErrorDialog: jest.fn().mockResolvedValue(undefined),
       onWindowHidden: jest.fn().mockReturnValue(jest.fn()),
       onWindowShown: jest.fn().mockReturnValue(jest.fn()),
-      onWindowResized: jest.fn().mockReturnValue(jest.fn()),
+      onWindowSizeRatioChanged: jest.fn().mockReturnValue(jest.fn()),
       hideWindow: jest.fn(),
       launchProgram: jest.fn().mockResolvedValue(undefined),
       getIcon: jest.fn().mockResolvedValue({ dataUrl: null }),
