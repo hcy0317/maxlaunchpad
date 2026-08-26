@@ -15,6 +15,7 @@ import {
 } from '../shared/windowBehavior';
 import { loadSettings, saveSettings } from './configStore';
 import log from './logger';
+import { IS_LINUX } from './platform';
 
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
@@ -27,10 +28,13 @@ let rendererModalAutoHideDepth = 0;
 let preferredWindowSize: WindowSize | null = null;
 let windowScaleBasis: WindowSize | null = null;
 let lastProgrammaticResizeSize: WindowSize | null = null;
+let programmaticResizeGuardTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingResizeOnlyPlatformPersistence: BrowserWindow | null = null;
 let isManualWindowResize = false;
 let resizePersistenceTimer: ReturnType<typeof setTimeout> | null = null;
 
 const DISPLAY_LAYOUT_METRICS = new Set(['bounds', 'workArea', 'scaleFactor']);
+const PROGRAMMATIC_RESIZE_GUARD_MS = 1000;
 
 function getCursorDisplayWorkArea() {
   return screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
@@ -48,8 +52,30 @@ function isValidWindowScaleBasis(size: WindowSize | null | undefined): size is W
 
 function suppressProgrammaticResizeNotifications(size?: WindowSize): void {
   if (size) {
+    if (programmaticResizeGuardTimer) {
+      clearTimeout(programmaticResizeGuardTimer);
+    }
+    pendingResizeOnlyPlatformPersistence = null;
     lastProgrammaticResizeSize = size;
+    programmaticResizeGuardTimer = setTimeout(() => {
+      programmaticResizeGuardTimer = null;
+      lastProgrammaticResizeSize = null;
+      const pendingWin = pendingResizeOnlyPlatformPersistence;
+      pendingResizeOnlyPlatformPersistence = null;
+      if (pendingWin && getMainWindow() === pendingWin) {
+        scheduleWindowSizePersistence(pendingWin);
+      }
+    }, PROGRAMMATIC_RESIZE_GUARD_MS);
   }
+}
+
+function clearProgrammaticResizeGuard(): void {
+  if (programmaticResizeGuardTimer) {
+    clearTimeout(programmaticResizeGuardTimer);
+    programmaticResizeGuardTimer = null;
+  }
+  lastProgrammaticResizeSize = null;
+  pendingResizeOnlyPlatformPersistence = null;
 }
 
 function clearPendingWindowSizePersistence(): void {
@@ -59,18 +85,29 @@ function clearPendingWindowSizePersistence(): void {
   }
 }
 
-function persistCurrentWindowSize(win: BrowserWindow): void {
+function persistCurrentWindowSize(
+  win: BrowserWindow,
+  programmaticResizeSizeAtEvent: WindowSize | null = null,
+): void {
   const [width, height] = win.getSize();
   const currentSize = { width, height };
-  if (lastProgrammaticResizeSize && isSameWindowSize(currentSize, lastProgrammaticResizeSize)) {
+  const guardedSize = lastProgrammaticResizeSize ?? programmaticResizeSizeAtEvent;
+  if (guardedSize) {
+    // Per-monitor DPI transitions can report stale intermediate bounds before the
+    // explicit target is reached. Keep the entire transition generation suppressed,
+    // even if its debounce callback runs just after the time-based guard expires.
+    if (IS_LINUX && !isSameWindowSize(currentSize, guardedSize)) {
+      if (lastProgrammaticResizeSize) {
+        pendingResizeOnlyPlatformPersistence = win;
+      } else {
+        scheduleWindowSizePersistence(win);
+      }
+    }
     return;
   }
-  lastProgrammaticResizeSize = null;
 
   const currentWorkArea = screen.getDisplayMatching(win.getBounds()).workArea;
-  const normalizedSize = normalizeWindowSizeToWorkArea(currentSize, currentWorkArea, {
-    resetWorkAreaFill: isLockWindowCenter,
-  });
+  const normalizedSize = normalizeWindowSizeToWorkArea(currentSize, currentWorkArea);
   const sizeInScaleBasis = windowScaleBasis
     ? getWindowSizeInScaleBasis(normalizedSize, windowScaleBasis, currentWorkArea)
     : normalizedSize;
@@ -89,10 +126,13 @@ function persistCurrentWindowSize(win: BrowserWindow): void {
 
 function scheduleWindowSizePersistence(win: BrowserWindow): void {
   clearPendingWindowSizePersistence();
+  const programmaticResizeSizeAtEvent = lastProgrammaticResizeSize
+    ? { ...lastProgrammaticResizeSize }
+    : null;
   resizePersistenceTimer = setTimeout(() => {
     resizePersistenceTimer = null;
     if (getMainWindow() === win) {
-      persistCurrentWindowSize(win);
+      persistCurrentWindowSize(win, programmaticResizeSizeAtEvent);
     }
   }, 150);
 }
@@ -114,9 +154,7 @@ export function createMainWindow(): BrowserWindow {
     ? savedScaleBasis
     : { width: currentWorkArea.width, height: currentWorkArea.height };
   windowScaleBasis = resolvedScaleBasis;
-  preferredWindowSize = normalizeWindowSizeToWorkArea(settings.windowSize, resolvedScaleBasis, {
-    resetWorkAreaFill: settings.lockWindowCenter,
-  });
+  preferredWindowSize = normalizeWindowSizeToWorkArea(settings.windowSize, resolvedScaleBasis);
   if (!hasValidScaleBasis || !isSameWindowSize(settings.windowSize, preferredWindowSize)) {
     saveSettings({
       ...settings,
@@ -177,7 +215,7 @@ export function createMainWindow(): BrowserWindow {
     mainWindow = null;
     preferredWindowSize = null;
     windowScaleBasis = null;
-    lastProgrammaticResizeSize = null;
+    clearProgrammaticResizeGuard();
     isManualWindowResize = false;
   });
 
@@ -218,6 +256,7 @@ export function createMainWindow(): BrowserWindow {
       event.preventDefault();
       return;
     }
+    clearProgrammaticResizeGuard();
     isManualWindowResize = true;
   });
 

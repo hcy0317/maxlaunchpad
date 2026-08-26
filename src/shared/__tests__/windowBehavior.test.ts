@@ -60,23 +60,15 @@ describe('windowBehavior', () => {
     expect(getWindowSizeInScaleBasis(displaySize, scaleBasis, targetWorkArea)).toEqual(basisSize);
   });
 
-  it('resets work-area-filled locked sizes to the default window size', () => {
+  it('keeps a configured work-area-filling size after normal work-area clamping', () => {
     expect(
-      normalizeWindowSizeToWorkArea(
-        { width: 2048, height: 896 },
-        { width: 2048, height: 896 },
-        { resetWorkAreaFill: true },
-      ),
-    ).toEqual({ width: 1000, height: 600 });
+      normalizeWindowSizeToWorkArea({ width: 2048, height: 896 }, { width: 2048, height: 896 }),
+    ).toEqual({ width: 2016, height: 864 });
   });
 
   it('keeps non-full user sizes when normalizing locked windows', () => {
     expect(
-      normalizeWindowSizeToWorkArea(
-        { width: 1200, height: 720 },
-        { width: 2048, height: 896 },
-        { resetWorkAreaFill: true },
-      ),
+      normalizeWindowSizeToWorkArea({ width: 1200, height: 720 }, { width: 2048, height: 896 }),
     ).toEqual({ width: 1200, height: 720 });
   });
 
