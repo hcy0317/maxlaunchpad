@@ -50,7 +50,9 @@ describe('configStore legacy custom styles', () => {
   });
 
   it('copies the bundled modern style template into fresh config dirs', async () => {
-    const { listCustomStyles, loadCustomStyleContent, loadSettings } = await import('../configStore');
+    const { listCustomStyles, loadCustomStyleContent, loadSettings } = await import(
+      '../configStore'
+    );
 
     loadSettings();
 
@@ -175,5 +177,39 @@ describe('configStore legacy custom styles', () => {
     const { loadSettings } = await import('../configStore');
 
     expect(loadSettings().language).toBeUndefined();
+  });
+
+  it('persists window ratios as the canonical layout and removes legacy size anchors', async () => {
+    const { loadSettings, saveSettings } = await import('../configStore');
+    const settings = loadSettings();
+
+    saveSettings({
+      ...settings,
+      windowSize: { width: 1247, height: 732 },
+      windowScaleBasis: { width: 2458, height: 1383 },
+    });
+
+    saveSettings({
+      ...settings,
+      windowSizeRatio: { width: 0.5073, height: 0.5293 },
+      windowSize: { width: 1247, height: 732 },
+      windowScaleBasis: { width: 2458, height: 1383 },
+    });
+
+    const settingsPath = path.join(tempConfigHome, 'MaxLaunchpad', 'settings.yaml');
+    const saved = fs.readFileSync(settingsPath, 'utf8');
+    expect(saved).toContain('windowSizeRatio:');
+    expect(saved).toContain('width: 0.5073');
+    expect(saved).not.toContain('\nwindowSize:');
+    expect(saved).not.toContain('\nwindowScaleBasis:');
+
+    const backupsDir = path.join(tempConfigHome, 'MaxLaunchpad', 'backups');
+    const migrationBackups = fs
+      .readdirSync(backupsDir)
+      .filter((name) => name.startsWith('settings.pre-window-ratio-migration-'));
+    expect(migrationBackups).toHaveLength(1);
+    const backup = fs.readFileSync(path.join(backupsDir, migrationBackups[0]), 'utf8');
+    expect(backup).toContain('windowSize:');
+    expect(backup).toContain('windowScaleBasis:');
   });
 });

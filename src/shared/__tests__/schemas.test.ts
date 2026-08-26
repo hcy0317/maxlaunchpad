@@ -238,7 +238,7 @@ describe('AppSettingsSchema', () => {
     theme: 'dark' as const,
     language: 'zh-CN' as const,
     customStyle: '.key { color: red; }',
-    windowSize: { width: 1000, height: 600 },
+    windowSizeRatio: { width: 1000 / 1920, height: 600 / 1080 },
     hideElements: { ...DEFAULT_HIDE_ELEMENTS },
   };
 
@@ -285,6 +285,19 @@ describe('AppSettingsSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('should reject invalid canonical window ratios', () => {
+    for (const windowSizeRatio of [
+      { width: 0, height: 0.5 },
+      { width: 0.5, height: -0.1 },
+      { width: 1.01, height: 0.5 },
+      { width: Number.NaN, height: 0.5 },
+    ]) {
+      expect(AppSettingsSchema.safeParse({ ...validSettings, windowSizeRatio }).success).toBe(
+        false,
+      );
+    }
+  });
+
   it('should reject settings missing required fields', () => {
     const requiredFields = [
       'hotkey',
@@ -296,7 +309,7 @@ describe('AppSettingsSchema', () => {
       'startInTray',
       'theme',
       'customStyle',
-      'windowSize',
+      'windowSizeRatio',
       'hideElements',
     ];
 

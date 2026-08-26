@@ -18,7 +18,7 @@ const settings: AppSettings = {
   theme: 'dark',
   language: 'zh-CN',
   customStyle: 'modern',
-  windowSize: { width: 1000, height: 600 },
+  windowSizeRatio: { width: 1000 / 1920, height: 600 / 1080 },
   hideElements: { ...DEFAULT_HIDE_ELEMENTS },
 };
 

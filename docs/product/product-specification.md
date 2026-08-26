@@ -159,6 +159,11 @@ interface WindowSize {
     height: number;
 }
 
+interface WindowSizeRatio {
+    width: number;   // Window width / display bounds width in Electron DIP
+    height: number;  // Window height / display bounds height in Electron DIP
+}
+
 interface AppSettings {
     hotkey: HotkeyConfig;
     activeTabOnShow: 'lastUsed' | string;  // 'lastUsed' or tab ID '1'-'0'
@@ -168,7 +173,9 @@ interface AppSettings {
     startInTray: boolean;                  // "Start in Tray (Minimized)", default: false
     theme: 'light' | 'dark' | 'system';    // "Theme", default: 'system'
     customStyle: string;                   // "Custom Style", style name without ".css", default: 'default'
-    windowSize: WindowSize;                // User-customized window size
+    windowSizeRatio: WindowSizeRatio;      // Canonical resolution-independent window layout
+    windowSize?: WindowSize;                // Legacy migration input only
+    windowScaleBasis?: WindowSize;          // Legacy migration input only
     hideElements: HideElements;            // Hide UI elements configuration
 }
 ```
@@ -186,9 +193,9 @@ launchOnStartup: true
 startInTray: true
 theme: system
 customStyle: default
-windowSize:
-  width: 1000
-  height: 600
+windowSizeRatio:
+  width: 0.5208333333
+  height: 0.5555555556
 hideElements:
   menu: false
   buttonIcons: false
@@ -203,7 +210,7 @@ hideElements:
 ### 3.5 Auto-Save and Backup
 
 - **Auto-save**: Triggered when the profile or settings change, with an optional 1-second debounce
-- **Backup**: (profile files only) Before each save, create a backup only if the content has changed
+- **Backup**: Profile files retain their existing change-based backups; the one-time window-ratio migration also backs up the legacy settings file before canonicalization
 - **Backup filename**: `${profileBaseName}.{tag}-YYYYMMDDHHmmss.yaml`
 
 ---
@@ -212,7 +219,7 @@ hideElements:
 
 ### 4.1 Properties
 
-- **Size**: 1000 × 600 pixels (default, resizable and persisted)
+- **Size**: Initially equivalent to 1000 × 600 on a 1920 × 1080 display; persisted as window-to-display ratios
 - **Title**: `MaxLaunchpad - ${activeProfilePath}` (adds a `*` suffix when there are unsaved changes)
 - **Always on Top**: Yes
 - **Menu Bar**: Custom in-window menu (not native OS menu)
@@ -225,7 +232,7 @@ hideElements:
 | Lock Window Center    | When enabled: auto-centers on show, disables window dragging                 |
 | Close button          | Minimizes to tray (does not exit)                                            |
 | Workspaces support    | macOS: Window appears on current virtual desktop (Space) when invoked        |
-| Multi-monitor support | Window appears on the monitor where the cursor is located when invoked       |
+| Multi-monitor support | Window, icons, and fonts scale together from saved ratios and target display DIP bounds |
 
 ---
 
@@ -571,4 +578,3 @@ Supports macOS `.app` and Windows UWP/Store apps
 - Global uncaught error handling
 - Log errors for diagnostics
 - Display native system dialog when operations fail (e.g., config load/save errors, program launch failures)
-

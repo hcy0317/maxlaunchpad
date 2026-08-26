@@ -69,12 +69,14 @@ const api = {
       ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_HIDDEN, listener);
     };
   },
-  onWindowResized: (callback: (width: number, height: number) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, width: number, height: number) =>
-      callback(width, height);
-    ipcRenderer.on(IPC_CHANNELS.WINDOW_RESIZED, listener);
+  onWindowSizeRatioChanged: (
+    callback: (widthRatio: number, heightRatio: number) => void,
+  ): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, widthRatio: number, heightRatio: number) =>
+      callback(widthRatio, heightRatio);
+    ipcRenderer.on(IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED, listener);
     return () => {
-      ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_RESIZED, listener);
+      ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED, listener);
     };
   },
 

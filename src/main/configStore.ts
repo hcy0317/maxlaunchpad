@@ -105,8 +105,14 @@ export function loadSettings(): AppSettings {
         ...data,
         // Deep merge hotkey
         hotkey: { ...defaults.hotkey, ...data.hotkey },
-        // Deep merge windowSize
-        windowSize: { ...defaults.windowSize, ...data.windowSize },
+        // Legacy windowSize remains available only until the main process migrates it.
+        windowSize: data.windowSizeRatio
+          ? undefined
+          : {
+              width: data.windowSize?.width ?? DEFAULT_WINDOW_SIZE.width,
+              height: data.windowSize?.height ?? DEFAULT_WINDOW_SIZE.height,
+            },
+        windowSizeRatio: data.windowSizeRatio ? { ...data.windowSizeRatio } : undefined,
         // Deep merge hideElements
         hideElements: { ...defaults.hideElements, ...data.hideElements },
       };
@@ -131,7 +137,22 @@ export function loadSettings(): AppSettings {
 export function saveSettings(settings: AppSettings): void {
   ensureConfigDir();
   try {
-    fs.writeFileSync(SETTINGS_FILE_PATH, dump(settings), 'utf8');
+    const canonicalSettings = { ...settings };
+    if (canonicalSettings.windowSizeRatio) {
+      if (
+        (canonicalSettings.windowSize || canonicalSettings.windowScaleBasis) &&
+        fs.existsSync(SETTINGS_FILE_PATH)
+      ) {
+        createBackup(
+          SETTINGS_FILE_PATH,
+          fs.readFileSync(SETTINGS_FILE_PATH, 'utf8'),
+          'pre-window-ratio-migration',
+        );
+      }
+      delete canonicalSettings.windowSize;
+      delete canonicalSettings.windowScaleBasis;
+    }
+    fs.writeFileSync(SETTINGS_FILE_PATH, dump(canonicalSettings), 'utf8');
     log.debug('Settings saved', { scope: 'configStore', path: SETTINGS_FILE_PATH });
   } catch (error) {
     log.error('Failed to save settings', { scope: 'configStore', error });

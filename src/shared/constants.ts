@@ -42,6 +42,7 @@ export const MENU_REVEAL_KEYS = ['Ctrl', 'Shift', 'Alt', 'Win'] as const;
 export const DEFAULT_MENU_REVEAL_KEY = 'Alt';
 
 export const DEFAULT_WINDOW_SIZE: WindowSize = { width: 1000, height: 600 };
+export const WINDOW_UI_DESIGN_WIDTH = 1000;
 
 // Electron Accelerator format mapping table
 export const CODE_TO_ACCELERATOR: Record<string, string> = {

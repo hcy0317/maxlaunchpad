@@ -65,7 +65,7 @@ const mockSettings: AppSettings = {
   theme: 'system',
   language: 'zh-CN',
   customStyle: 'default',
-  windowSize: { width: 1000, height: 600 },
+  windowSizeRatio: { width: 1000 / 1920, height: 600 / 1080 },
   hideElements: { ...DEFAULT_HIDE_ELEMENTS },
 };
 
