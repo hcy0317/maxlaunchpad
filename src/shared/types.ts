@@ -75,7 +75,9 @@ export interface AppSettings {
   theme: 'light' | 'dark' | 'system';
   language?: AppLanguage;
   customStyle: string; // Style name without ".css", default 'default'
+  fontFamily?: string; // Empty/undefined follows the style or system font stack
   windowSizeRatio?: WindowSizeRatio; // Canonical window-to-display ratios
+  contentScaleRatio?: number; // Canonical UI zoom-to-display-width ratio
   windowSize?: WindowSize; // Legacy migration source
   windowScaleBasis?: WindowSize; // Legacy migration source
   hideElements: HideElements; // Hide elements configuration

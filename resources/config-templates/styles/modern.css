@@ -2,9 +2,7 @@
   --background-color: #f5f6f8;
   --selected-background-color: #e8f3ff;
   --text-color: #1f2328;
-  --ml-font:
-    "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI",
-    "Microsoft YaHei", Arial, sans-serif;
+  --ml-font: var(--app-font-family);
   --ml-surface: #ffffff;
   --ml-surface-raised: #ffffff;
   --ml-surface-muted: #eef1f5;

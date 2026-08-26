@@ -6,10 +6,12 @@ import { IPC_CHANNELS } from '../shared/ipcChannels';
 import type { AppSettings, WindowSize, WindowSizeRatio } from '../shared/types';
 import {
   getCenteredWindowBounds,
+  getContentScaleRatio,
+  getContentZoomFactor,
   getLegacyDisplayAwareWindowSize,
+  getLegacyDisplayScaleFactor,
   getWindowSizeFromRatio,
   getWindowSizeRatio,
-  getWindowZoomFactor,
   normalizeWindowSizeToWorkArea,
   shouldAllowWindowMovement,
   shouldAllowWindowResize,
@@ -27,6 +29,7 @@ let isDragDropMode = false;
 let nativeDialogDepth = 0;
 let rendererModalAutoHideDepth = 0;
 let preferredWindowSizeRatio: WindowSizeRatio | null = null;
+let preferredContentScaleRatio: number | null = null;
 let lastProgrammaticResizeSize: WindowSize | null = null;
 let programmaticResizeGuardTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingResizeOnlyPlatformPersistence: BrowserWindow | null = null;
@@ -64,6 +67,10 @@ function isValidWindowSizeRatio(
   );
 }
 
+function isValidContentScaleRatio(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
 function getDisplayBounds(display: Display): Display['bounds'] {
   // Electron exposes bounds in DPI-virtualized DIP, so these ratios already include
   // the target display's resolution and OS scale factor without storing either one.
@@ -84,6 +91,17 @@ function resolveWindowSizeRatio(settings: AppSettings, currentDisplay: Display):
       )
     : normalizeWindowSizeToWorkArea(legacySize, currentDisplay.workArea);
   return getWindowSizeRatio(displayedSize, getDisplayBounds(currentDisplay));
+}
+
+function resolveContentScaleRatio(settings: AppSettings, currentDisplay: Display): number {
+  if (isValidContentScaleRatio(settings.contentScaleRatio)) {
+    return settings.contentScaleRatio;
+  }
+
+  const legacyZoomFactor = isValidWindowScaleBasis(settings.windowScaleBasis)
+    ? getLegacyDisplayScaleFactor(settings.windowScaleBasis, currentDisplay.workArea)
+    : 1;
+  return getContentScaleRatio(legacyZoomFactor, getDisplayBounds(currentDisplay));
 }
 
 function suppressProgrammaticResizeNotifications(size?: WindowSize): void {
@@ -148,7 +166,13 @@ function persistCurrentWindowSize(
   const wasConstrained = !isSameWindowSize(currentSize, normalizedSize);
 
   preferredWindowSizeRatio = sizeRatio;
-  win.webContents.setZoomFactor(getWindowZoomFactor(normalizedSize));
+  win.webContents.setZoomFactor(
+    getContentZoomFactor(
+      preferredContentScaleRatio ?? getContentScaleRatio(1, getDisplayBounds(currentDisplay)),
+      getDisplayBounds(currentDisplay),
+      normalizedSize,
+    ),
+  );
   win.webContents.send(IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED, sizeRatio.width, sizeRatio.height);
 
   if (wasConstrained) {
@@ -185,20 +209,24 @@ export function createMainWindow(): BrowserWindow {
 
   const currentDisplay = getCursorDisplay();
   preferredWindowSizeRatio = resolveWindowSizeRatio(settings, currentDisplay);
-  const needsWindowRatioMigration =
+  preferredContentScaleRatio = resolveContentScaleRatio(settings, currentDisplay);
+  const needsWindowLayoutMigration =
     !isValidWindowSizeRatio(settings.windowSizeRatio) ||
+    !isValidContentScaleRatio(settings.contentScaleRatio) ||
     settings.windowSize !== undefined ||
     settings.windowScaleBasis !== undefined;
-  if (needsWindowRatioMigration) {
-    log.info('Migrating window layout to display ratios', {
+  if (needsWindowLayoutMigration) {
+    log.info('Migrating window and content layout to display ratios', {
       scope: 'window',
       displayId: currentDisplay.id,
       displayBounds: getDisplayBounds(currentDisplay),
       windowSizeRatio: preferredWindowSizeRatio,
+      contentScaleRatio: preferredContentScaleRatio,
     });
     saveSettings({
       ...settings,
       windowSizeRatio: preferredWindowSizeRatio,
+      contentScaleRatio: preferredContentScaleRatio,
     });
   }
   const initialWindowSize = getWindowSizeFromRatio(
@@ -206,7 +234,11 @@ export function createMainWindow(): BrowserWindow {
     getDisplayBounds(currentDisplay),
     currentDisplay.workArea,
   );
-  const initialZoomFactor = getWindowZoomFactor(initialWindowSize);
+  const initialZoomFactor = getContentZoomFactor(
+    preferredContentScaleRatio,
+    getDisplayBounds(currentDisplay),
+    initialWindowSize,
+  );
 
   mainWindow = new BrowserWindow({
     width: initialWindowSize.width,
@@ -253,6 +285,7 @@ export function createMainWindow(): BrowserWindow {
     screen.off('display-metrics-changed', handleDisplayMetricsChanged);
     mainWindow = null;
     preferredWindowSizeRatio = null;
+    preferredContentScaleRatio = null;
     clearProgrammaticResizeGuard();
     isManualWindowResize = false;
   });
@@ -327,7 +360,7 @@ function applyPreferredLayoutToDisplay(
   display: Display,
   centered: boolean,
 ): void {
-  if (!preferredWindowSizeRatio) {
+  if (!preferredWindowSizeRatio || !preferredContentScaleRatio) {
     return;
   }
 
@@ -337,7 +370,9 @@ function applyPreferredLayoutToDisplay(
     getDisplayBounds(display),
     display.workArea,
   );
-  win.webContents.setZoomFactor(getWindowZoomFactor(displaySize));
+  win.webContents.setZoomFactor(
+    getContentZoomFactor(preferredContentScaleRatio, getDisplayBounds(display), displaySize),
+  );
   const currentBounds = win.getBounds();
   const bounds = centered
     ? getCenteredWindowBounds(displaySize, display.workArea)
@@ -388,7 +423,7 @@ function handleDisplayMetricsChanged(
 
 function restoreConfiguredSizeForShow(win: BrowserWindow): void {
   const currentDisplay = getCursorDisplay();
-  if (!preferredWindowSizeRatio) {
+  if (!preferredWindowSizeRatio || !preferredContentScaleRatio) {
     return;
   }
   clearPendingWindowSizePersistence();
@@ -397,7 +432,9 @@ function restoreConfiguredSizeForShow(win: BrowserWindow): void {
     getDisplayBounds(currentDisplay),
     currentDisplay.workArea,
   );
-  win.webContents.setZoomFactor(getWindowZoomFactor(displaySize));
+  win.webContents.setZoomFactor(
+    getContentZoomFactor(preferredContentScaleRatio, getDisplayBounds(currentDisplay), displaySize),
+  );
 
   const [currentWidth, currentHeight] = win.getSize();
   if (currentWidth === displaySize.width && currentHeight === displaySize.height) {
@@ -487,7 +524,11 @@ export function resizeMainWindowByHeightDelta(delta: number): void {
   const [width, height] = win.getSize();
   const currentDisplay = screen.getDisplayMatching(win.getBounds());
   const currentWorkArea = currentDisplay.workArea;
-  const zoomFactor = getWindowZoomFactor({ width, height });
+  const zoomFactor = getContentZoomFactor(
+    preferredContentScaleRatio ?? getContentScaleRatio(1, getDisplayBounds(currentDisplay)),
+    getDisplayBounds(currentDisplay),
+    { width },
+  );
   const nextSize = normalizeWindowSizeToWorkArea(
     { width, height: height + Math.round(delta * zoomFactor) },
     currentWorkArea,

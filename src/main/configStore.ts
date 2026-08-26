@@ -89,6 +89,7 @@ export function loadSettings(): AppSettings {
     startInTray: false,
     theme: 'system',
     customStyle: 'default',
+    fontFamily: '',
     windowSize: { ...DEFAULT_WINDOW_SIZE },
     hideElements: { ...DEFAULT_HIDE_ELEMENTS },
   };

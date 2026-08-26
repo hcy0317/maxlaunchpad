@@ -100,6 +100,10 @@ const api = {
   loadStyleContent: (styleName: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.STYLES_LOAD, styleName) as Promise<{ content: string | null }>,
 
+  // System fonts
+  listSystemFonts: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.FONTS_LIST) as Promise<{ fonts: string[] }>,
+
   // Dialog (also logs errors)
   showErrorDialog: (title: string, content: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SHOW_ERROR, title, content),

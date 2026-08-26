@@ -18,6 +18,7 @@ const settings: AppSettings = {
   theme: 'dark',
   language: 'zh-CN',
   customStyle: 'modern',
+  fontFamily: '',
   windowSizeRatio: { width: 1000 / 1920, height: 600 / 1080 },
   hideElements: { ...DEFAULT_HIDE_ELEMENTS },
 };
@@ -54,9 +55,11 @@ describe('OptionsModal', () => {
     void i18n.changeLanguage('zh-CN');
     settings.theme = 'dark';
     settings.customStyle = 'modern';
+    settings.fontFamily = '';
     window.electronAPI = {
       ...window.electronAPI,
       listStyles: jest.fn(() => new Promise(() => undefined)),
+      listSystemFonts: jest.fn(() => new Promise(() => undefined)),
       setWindowAutoHideSuspended: jest.fn(),
     };
   });
@@ -73,6 +76,35 @@ describe('OptionsModal', () => {
     expect(labels.indexOf('自定义样式:')).toBeGreaterThanOrEqual(0);
     expect(labels.indexOf('主题:')).toBeLessThan(labels.indexOf('自定义样式:'));
     expect(labels.indexOf('自定义样式:')).toBeLessThan(labels.indexOf('语言:'));
+  });
+
+  it('loads installed system fonts and persists the selected family', async () => {
+    window.electronAPI.listSystemFonts = jest
+      .fn()
+      .mockResolvedValue({ fonts: ['Segoe UI', 'Arial', 'Arial'] });
+    render(<OptionsModal />);
+
+    const fontSelect = await screen.findByRole('combobox', { name: '字体:' });
+    await waitFor(() => {
+      expect(
+        Array.from((fontSelect as HTMLSelectElement).options).map((option) => option.text),
+      ).toEqual(['跟随系统', 'Arial', 'Segoe UI']);
+    });
+
+    fireEvent.change(fontSelect, { target: { value: 'Segoe UI' } });
+
+    expect(dispatchMock).toHaveBeenCalledWith({
+      type: 'UPDATE_SETTINGS',
+      settings: { fontFamily: 'Segoe UI' },
+    });
+  });
+
+  it('shows an inline failure state when system fonts cannot be read', async () => {
+    window.electronAPI.listSystemFonts = jest.fn().mockRejectedValue(new Error('registry denied'));
+
+    render(<OptionsModal />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('读取系统字体失败');
   });
 
   it('dispatches a language settings update from the language dropdown', async () => {
