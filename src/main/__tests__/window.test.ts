@@ -4,7 +4,7 @@ const saveSettingsMock = jest.fn();
 type DisplayMock = {
   id: number;
   scaleFactor: number;
-  bounds?: { x: number; y: number; width: number; height: number };
+  bounds: { x: number; y: number; width: number; height: number };
   workArea: { x: number; y: number; width: number; height: number };
 };
 const getCursorScreenPointMock = jest.fn(() => ({ x: 5000, y: 100 }));
@@ -222,6 +222,7 @@ describe('createMainWindow', () => {
     getDisplayNearestPointMock.mockReturnValue({
       id: 1,
       scaleFactor: 2,
+      bounds: { x: 0, y: 0, width: 2048, height: 1080 },
       workArea: { x: 0, y: 0, width: 2048, height: 1080 },
     });
     const { createMainWindow, showMainWindow } = await import('../window');
@@ -253,6 +254,37 @@ describe('createMainWindow', () => {
         webPreferences: expect.objectContaining({ zoomFactor: 0.625 }),
       }),
     );
+  });
+
+  it('uses display bounds for ratios while reserving workArea for placement', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSizeRatio: { width: 0.5, height: 0.5 },
+      lockWindowCenter: true,
+    });
+    getDisplayNearestPointMock.mockReturnValue({
+      id: 2,
+      scaleFactor: 1,
+      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+      workArea: { x: 100, y: 50, width: 1600, height: 900 },
+    });
+    const { createMainWindow, showMainWindow } = await import('../window');
+
+    createMainWindow();
+    showMainWindow();
+
+    expect(browserWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        width: 960,
+        height: 540,
+        webPreferences: expect.objectContaining({ zoomFactor: 0.96 }),
+      }),
+    );
+    expect(setBoundsMock).toHaveBeenLastCalledWith({
+      x: 420,
+      y: 230,
+      width: 960,
+      height: 540,
+    });
   });
 
   it('migrates an invalid legacy scale basis without changing the current layout', async () => {
@@ -298,6 +330,7 @@ describe('createMainWindow', () => {
     getDisplayNearestPointMock.mockReturnValue({
       id: 2,
       scaleFactor: 1.25,
+      bounds: { x: 0, y: 0, width: 2458, height: 1383 },
       workArea: { x: 0, y: 0, width: 2458, height: 1383 },
     });
     const { createMainWindow } = await import('../window');
@@ -353,6 +386,7 @@ describe('createMainWindow', () => {
     getDisplayNearestPointMock.mockReturnValue({
       id: 2,
       scaleFactor: 1,
+      bounds: { x: 0, y: 0, width: 2048, height: 896 },
       workArea: { x: 0, y: 0, width: 2048, height: 896 },
     });
     const { createMainWindow } = await import('../window');
@@ -746,6 +780,42 @@ describe('createMainWindow', () => {
       500 / 1080,
     );
     expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.9);
+  });
+
+  it('persists and applies a safely clamped manual resize for unlocked windows', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSizeRatio: { width: 0.5, height: 0.5 },
+      lockWindowCenter: false,
+    });
+    const { IPC_CHANNELS } = await import('../../shared/ipcChannels');
+    const { createMainWindow } = await import('../window');
+
+    createMainWindow();
+    const willResizeHandler = onMock.mock.calls.find(
+      ([eventName]) => eventName === 'will-resize',
+    )?.[1] as ((event: { preventDefault: () => void }) => void) | undefined;
+    const resizeHandler = onMock.mock.calls.find(([eventName]) => eventName === 'resize')?.[1] as
+      | (() => void)
+      | undefined;
+    expect(willResizeHandler).toBeDefined();
+    expect(resizeHandler).toBeDefined();
+
+    willResizeHandler!({ preventDefault: jest.fn() });
+    getSizeMock.mockReturnValue([2000, 1100]);
+    resizeHandler!();
+
+    expect(setBoundsMock).toHaveBeenLastCalledWith({
+      x: 120,
+      y: 140,
+      width: 1888,
+      height: 1048,
+    });
+    expect(webContentsSendMock).toHaveBeenLastCalledWith(
+      IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED,
+      1888 / 1920,
+      1048 / 1080,
+    );
+    expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(1.888);
   });
 
   it('keeps blur auto-hide suspended while renderer modals are mounted', async () => {

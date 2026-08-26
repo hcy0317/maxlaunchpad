@@ -67,7 +67,7 @@ function isValidWindowSizeRatio(
 function getDisplayBounds(display: Display): Display['bounds'] {
   // Electron exposes bounds in DPI-virtualized DIP, so these ratios already include
   // the target display's resolution and OS scale factor without storing either one.
-  return display.bounds ?? display.workArea;
+  return display.bounds;
 }
 
 function resolveWindowSizeRatio(settings: AppSettings, currentDisplay: Display): WindowSizeRatio {
@@ -145,14 +145,19 @@ function persistCurrentWindowSize(
   const currentDisplay = screen.getDisplayMatching(win.getBounds());
   const normalizedSize = normalizeWindowSizeToWorkArea(currentSize, currentDisplay.workArea);
   const sizeRatio = getWindowSizeRatio(normalizedSize, getDisplayBounds(currentDisplay));
-
-  if (!isSameWindowSize(currentSize, normalizedSize) && !isLockWindowCenter) {
-    return;
-  }
+  const wasConstrained = !isSameWindowSize(currentSize, normalizedSize);
 
   preferredWindowSizeRatio = sizeRatio;
   win.webContents.setZoomFactor(getWindowZoomFactor(normalizedSize));
   win.webContents.send(IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED, sizeRatio.width, sizeRatio.height);
+
+  if (wasConstrained) {
+    suppressProgrammaticResizeNotifications(normalizedSize);
+    const bounds = isLockWindowCenter
+      ? getCenteredWindowBounds(normalizedSize, currentDisplay.workArea)
+      : { ...win.getBounds(), ...normalizedSize };
+    win.setBounds(bounds);
+  }
 }
 
 function scheduleWindowSizePersistence(win: BrowserWindow): void {

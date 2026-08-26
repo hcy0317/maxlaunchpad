@@ -67,20 +67,51 @@ describe('windowBehavior', () => {
     expect(ratio.height).toBeCloseTo(732 / 1383, 10);
 
     for (const display of [
-      { bounds: { width: 2458, height: 1383 }, scaleFactor: 1.5625 },
-      { bounds: { width: 3072, height: 1728 }, scaleFactor: 1.25 },
-      { bounds: { width: 1920, height: 1080 }, scaleFactor: 1 },
+      {
+        bounds: { width: 2458, height: 1383 },
+        workArea: { width: 2400, height: 1300 },
+        scaleFactor: 1.5625,
+      },
+      {
+        bounds: { width: 3072, height: 1728 },
+        workArea: { width: 3000, height: 1650 },
+        scaleFactor: 1.25,
+      },
+      {
+        bounds: { width: 1920, height: 1080 },
+        workArea: { width: 1840, height: 1000 },
+        scaleFactor: 1,
+      },
+      {
+        bounds: { width: 3440, height: 1440 },
+        workArea: { width: 3300, height: 1320 },
+        scaleFactor: 1.25,
+      },
+      {
+        bounds: { width: 1600, height: 1200 },
+        workArea: { width: 1500, height: 1100 },
+        scaleFactor: 1,
+      },
     ]) {
-      const size = getWindowSizeFromRatio(ratio, display.bounds, display.bounds);
+      const size = getWindowSizeFromRatio(ratio, display.bounds, display.workArea);
       const zoomFactor = getWindowZoomFactor(size);
       const physicalDisplayWidth = display.bounds.width * display.scaleFactor;
       const physicalWindowWidth = size.width * display.scaleFactor;
       const physicalDesignPixel = zoomFactor * display.scaleFactor;
 
-      expect(size.width / display.bounds.width).toBeCloseTo(ratio.width, 3);
-      expect(size.height / display.bounds.height).toBeCloseTo(ratio.height, 3);
-      expect(physicalWindowWidth / physicalDisplayWidth).toBeCloseTo(ratio.width, 3);
-      expect(physicalDesignPixel / physicalDisplayWidth).toBeCloseTo(ratio.width / 1000, 3);
+      expect(size.width).toBe(Math.round(ratio.width * display.bounds.width));
+      expect(size.height).toBe(Math.round(ratio.height * display.bounds.height));
+      const actualWidthRatio = size.width / display.bounds.width;
+      const actualHeightRatio = size.height / display.bounds.height;
+      expect(Math.abs(actualWidthRatio - ratio.width)).toBeLessThanOrEqual(
+        0.5 / display.bounds.width + Number.EPSILON,
+      );
+      expect(Math.abs(actualHeightRatio - ratio.height)).toBeLessThanOrEqual(
+        0.5 / display.bounds.height + Number.EPSILON,
+      );
+      expect(physicalWindowWidth / physicalDisplayWidth).toBeCloseTo(actualWidthRatio, 12);
+      expect(physicalDesignPixel / physicalDisplayWidth).toBeCloseTo(actualWidthRatio / 1000, 12);
+      expect(physicalDesignPixel / physicalWindowWidth).toBeCloseTo(1 / 1000, 12);
     }
   });
 
