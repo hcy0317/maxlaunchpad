@@ -339,19 +339,23 @@ body,
 }
 
 .tabbed-keyboard-panel::before {
-  content: '' !important;
+  content: "" !important;
   position: absolute !important;
   left: 0 !important;
   right: 0 !important;
   top: 39px !important;
   height: 1px !important;
-  background: color-mix(in srgb, var(--ml-accent) 42%, var(--ml-tab-edge)) !important;
+  background: color-mix(
+    in srgb,
+    var(--ml-accent) 42%,
+    var(--ml-tab-edge)
+  ) !important;
   z-index: 3 !important;
   pointer-events: none !important;
 }
 
 .tabbed-keyboard-panel::after {
-  content: '' !important;
+  content: "" !important;
   position: absolute !important;
   left: 0 !important;
   right: 0 !important;
@@ -454,7 +458,11 @@ body,
 }
 
 .key-btn:hover {
-  border-color: color-mix(in srgb, var(--ml-accent) 55%, var(--ml-border)) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--ml-accent) 55%,
+    var(--ml-border)
+  ) !important;
   background: var(--ml-surface-hover) !important;
   color: var(--text-color) !important;
   transform: translateY(-1px) !important;
@@ -651,7 +659,11 @@ body.key-move-active * {
 }
 
 .num-key-btn.selected {
-  border-color: color-mix(in srgb, var(--ml-accent) 62%, var(--ml-border)) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--ml-accent) 62%,
+    var(--ml-border)
+  ) !important;
   border-bottom-color: transparent !important;
   background: var(--ml-accent-soft) !important;
   background-clip: border-box !important;
@@ -662,7 +674,7 @@ body.key-move-active * {
 }
 
 .num-key-btn.selected::after {
-  content: '' !important;
+  content: "" !important;
   position: absolute !important;
   left: 0 !important;
   right: 0 !important;
@@ -775,7 +787,7 @@ body.tab-move-active * {
   min-width: 0 !important;
 }
 
-.modal-row input[type='text'],
+.modal-row input[type="text"],
 .modal-row textarea,
 .modal-row select,
 .file-picker-actions button,
@@ -788,7 +800,7 @@ body.tab-move-active * {
   font: 14px var(--ml-font) !important;
 }
 
-.modal-row input[type='text']:focus,
+.modal-row input[type="text"]:focus,
 .modal-row textarea:focus,
 .modal-row select:focus {
   outline: none !important;
