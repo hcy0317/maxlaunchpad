@@ -133,6 +133,8 @@ describe('createMainWindow', () => {
     getSizeMock.mockReturnValue([720, 480]);
     isFullScreenMock.mockClear();
     isMaximizedMock.mockClear();
+    isFullScreenMock.mockReturnValue(false);
+    isMaximizedMock.mockReturnValue(false);
     setBoundsMock.mockClear();
     setFullScreenMock.mockClear();
     setSizeMock.mockClear();
@@ -196,6 +198,8 @@ describe('createMainWindow', () => {
       expect.objectContaining({
         frame: false,
         resizable: true,
+        maximizable: false,
+        fullscreenable: false,
       }),
     );
   });
@@ -451,6 +455,23 @@ describe('createMainWindow', () => {
     });
   });
 
+  it('exits fullscreen and maximized state before comparing restored window dimensions', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSizeRatio: { width: 720 / 1920, height: 480 / 1080 },
+      contentScaleRatio: 1 / 1920,
+      lockWindowCenter: true,
+    });
+    isFullScreenMock.mockReturnValue(true);
+    isMaximizedMock.mockReturnValue(true);
+    const { createMainWindow, showMainWindow } = await import('../window');
+
+    createMainWindow();
+    showMainWindow();
+
+    expect(setFullScreenMock).toHaveBeenCalledWith(false);
+    expect(unmaximizeMock).toHaveBeenCalled();
+  });
+
   it('restores the original layout after a display metrics round trip', async () => {
     loadSettingsMock.mockReturnValue({
       windowSizeRatio: { width: 1378 / 3072, height: 771 / 1728 },
@@ -671,7 +692,11 @@ describe('createMainWindow', () => {
     const resizeHandler = onMock.mock.calls.find(([eventName]) => eventName === 'resize')?.[1] as
       | (() => void)
       | undefined;
+    const resizedHandler = onMock.mock.calls.find(([eventName]) => eventName === 'resized')?.[1] as
+      | (() => void)
+      | undefined;
     expect(resizeHandler).toBeDefined();
+    expect(resizedHandler).toBeDefined();
 
     resizeMainWindowByHeightDelta(-120);
     getSizeMock.mockReturnValue([720, 360]);
@@ -690,6 +715,7 @@ describe('createMainWindow', () => {
     willResizeHandler!({ preventDefault: jest.fn() });
     getSizeMock.mockReturnValue([720, 500]);
     resizeHandler!();
+    resizedHandler!();
 
     expect(webContentsSendMock).toHaveBeenCalledWith(
       IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED,
@@ -781,7 +807,7 @@ describe('createMainWindow', () => {
     }
   });
 
-  it('persists manual resize dimensions as display ratios', async () => {
+  it('persists manual resize dimensions only after interactive resizing finishes', async () => {
     loadSettingsMock.mockReturnValue({
       windowSizeRatio: { width: 1378 / 3072, height: 771 / 1728 },
       lockWindowCenter: true,
@@ -793,7 +819,11 @@ describe('createMainWindow', () => {
     const resizeHandler = onMock.mock.calls.find(([eventName]) => eventName === 'resize')?.[1] as
       | (() => void)
       | undefined;
+    const resizedHandler = onMock.mock.calls.find(([eventName]) => eventName === 'resized')?.[1] as
+      | (() => void)
+      | undefined;
     expect(resizeHandler).toBeDefined();
+    expect(resizedHandler).toBeDefined();
 
     const willResizeHandler = onMock.mock.calls.find(
       ([eventName]) => eventName === 'will-resize',
@@ -803,12 +833,41 @@ describe('createMainWindow', () => {
     getSizeMock.mockReturnValue([900, 500]);
     resizeHandler!();
 
+    expect(webContentsSendMock).not.toHaveBeenCalled();
+    expect(webContentsSetZoomFactorMock).not.toHaveBeenCalled();
+
+    resizedHandler!();
+
     expect(webContentsSendMock).toHaveBeenLastCalledWith(
       IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED,
       900 / 1920,
       500 / 1080,
     );
     expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(0.9);
+  });
+
+  it('never persists maximized window bounds as the user window ratio', async () => {
+    jest.useFakeTimers();
+    try {
+      const { createMainWindow } = await import('../window');
+
+      createMainWindow();
+      const resizeHandler = onMock.mock.calls.find(([eventName]) => eventName === 'resize')?.[1] as
+        | (() => void)
+        | undefined;
+      expect(resizeHandler).toBeDefined();
+
+      isMaximizedMock.mockReturnValue(true);
+      getSizeMock.mockReturnValue([1920, 1080]);
+      resizeHandler!();
+      jest.advanceTimersByTime(150);
+
+      expect(webContentsSendMock).not.toHaveBeenCalled();
+      expect(webContentsSetZoomFactorMock).not.toHaveBeenCalled();
+    } finally {
+      jest.runOnlyPendingTimers();
+      jest.useRealTimers();
+    }
   });
 
   it('persists and applies a safely clamped manual resize for unlocked windows', async () => {
@@ -826,12 +885,17 @@ describe('createMainWindow', () => {
     const resizeHandler = onMock.mock.calls.find(([eventName]) => eventName === 'resize')?.[1] as
       | (() => void)
       | undefined;
+    const resizedHandler = onMock.mock.calls.find(([eventName]) => eventName === 'resized')?.[1] as
+      | (() => void)
+      | undefined;
     expect(willResizeHandler).toBeDefined();
     expect(resizeHandler).toBeDefined();
+    expect(resizedHandler).toBeDefined();
 
     willResizeHandler!({ preventDefault: jest.fn() });
     getSizeMock.mockReturnValue([2000, 1100]);
     resizeHandler!();
+    resizedHandler!();
 
     expect(setBoundsMock).toHaveBeenLastCalledWith({
       x: 120,

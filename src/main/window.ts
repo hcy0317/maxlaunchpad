@@ -143,6 +143,10 @@ function persistCurrentWindowSize(
   win: BrowserWindow,
   programmaticResizeSizeAtEvent: WindowSize | null = null,
 ): void {
+  if (win.isMaximized() || win.isFullScreen()) {
+    return;
+  }
+
   const [width, height] = win.getSize();
   const currentSize = { width, height };
   const guardedSize = lastProgrammaticResizeSize ?? programmaticResizeSizeAtEvent;
@@ -245,6 +249,8 @@ export function createMainWindow(): BrowserWindow {
     height: initialWindowSize.height,
     center: true,
     resizable: true,
+    maximizable: false,
+    fullscreenable: false,
     frame: false,
     alwaysOnTop: true,
     show: false,
@@ -307,7 +313,6 @@ export function createMainWindow(): BrowserWindow {
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (isManualWindowResize) {
         clearPendingWindowSizePersistence();
-        persistCurrentWindowSize(mainWindow);
       } else {
         scheduleWindowSizePersistence(mainWindow);
       }
@@ -332,7 +337,11 @@ export function createMainWindow(): BrowserWindow {
   });
 
   mainWindow.on('resized', () => {
+    const completedManualResize = isManualWindowResize;
     isManualWindowResize = false;
+    if (completedManualResize && mainWindow && !mainWindow.isDestroyed()) {
+      persistCurrentWindowSize(mainWindow);
+    }
   });
 
   applyWindowInteractionPolicy(mainWindow);
@@ -436,18 +445,26 @@ function restoreConfiguredSizeForShow(win: BrowserWindow): void {
     getContentZoomFactor(preferredContentScaleRatio, getDisplayBounds(currentDisplay), displaySize),
   );
 
-  const [currentWidth, currentHeight] = win.getSize();
-  if (currentWidth === displaySize.width && currentHeight === displaySize.height) {
-    return;
-  }
-
   try {
-    if (win.isFullScreen()) {
+    const wasFullScreen = win.isFullScreen();
+    const wasMaximized = win.isMaximized();
+    if (wasFullScreen) {
       win.setFullScreen(false);
     }
-    if (win.isMaximized()) {
+    if (wasMaximized) {
       win.unmaximize();
     }
+
+    const [currentWidth, currentHeight] = win.getSize();
+    if (
+      !wasFullScreen &&
+      !wasMaximized &&
+      currentWidth === displaySize.width &&
+      currentHeight === displaySize.height
+    ) {
+      return;
+    }
+
     suppressProgrammaticResizeNotifications(displaySize);
     win.setSize(displaySize.width, displaySize.height);
   } catch (error) {
