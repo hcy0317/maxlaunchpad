@@ -35,9 +35,11 @@ let programmaticResizeGuardTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingResizeOnlyPlatformPersistence: BrowserWindow | null = null;
 let isManualWindowResize = false;
 let resizePersistenceTimer: ReturnType<typeof setTimeout> | null = null;
+let displayTopologyRestoreTimer: ReturnType<typeof setTimeout> | null = null;
 
 const DISPLAY_LAYOUT_METRICS = new Set(['bounds', 'workArea', 'scaleFactor']);
 const PROGRAMMATIC_RESIZE_GUARD_MS = 1000;
+const DISPLAY_TOPOLOGY_SETTLE_MS = 500;
 
 function getCursorDisplay(): Display {
   return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
@@ -137,6 +139,40 @@ function clearPendingWindowSizePersistence(): void {
     clearTimeout(resizePersistenceTimer);
     resizePersistenceTimer = null;
   }
+}
+
+function clearPendingDisplayTopologyRestore(): void {
+  if (displayTopologyRestoreTimer) {
+    clearTimeout(displayTopologyRestoreTimer);
+    displayTopologyRestoreTimer = null;
+  }
+}
+
+function scheduleDisplayTopologyRestore(): void {
+  const win = getMainWindow();
+  if (!win) {
+    return;
+  }
+
+  clearPendingWindowSizePersistence();
+  clearPendingDisplayTopologyRestore();
+  displayTopologyRestoreTimer = setTimeout(() => {
+    displayTopologyRestoreTimer = null;
+    const currentWindow = getMainWindow();
+    if (!currentWindow) {
+      return;
+    }
+
+    try {
+      const display = screen.getDisplayMatching(currentWindow.getBounds());
+      applyPreferredLayoutToDisplay(currentWindow, display, isLockWindowCenter);
+    } catch (error) {
+      log.error('Failed to adapt window after display topology change', {
+        scope: 'window',
+        error,
+      });
+    }
+  }, DISPLAY_TOPOLOGY_SETTLE_MS);
 }
 
 function persistCurrentWindowSize(
@@ -264,6 +300,8 @@ export function createMainWindow(): BrowserWindow {
     },
   });
   screen.on('display-metrics-changed', handleDisplayMetricsChanged);
+  screen.on('display-added', scheduleDisplayTopologyRestore);
+  screen.on('display-removed', scheduleDisplayTopologyRestore);
 
   // macOS: show on current virtual desktop when invoked via hotkey
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -288,7 +326,10 @@ export function createMainWindow(): BrowserWindow {
 
   mainWindow.on('closed', () => {
     clearPendingWindowSizePersistence();
+    clearPendingDisplayTopologyRestore();
     screen.off('display-metrics-changed', handleDisplayMetricsChanged);
+    screen.off('display-added', scheduleDisplayTopologyRestore);
+    screen.off('display-removed', scheduleDisplayTopologyRestore);
     mainWindow = null;
     preferredWindowSizeRatio = null;
     preferredContentScaleRatio = null;
@@ -308,13 +349,17 @@ export function createMainWindow(): BrowserWindow {
     }
   });
 
-  // Notify renderer when window is resized (saving handled by useConfigSync with debounce)
+  // Only Linux needs resize-only persistence as a fallback. Windows and macOS emit
+  // will-resize/resized for user drags, while display topology changes can emit resize
+  // without user intent and must never overwrite the saved display ratio.
   mainWindow.on('resize', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (isManualWindowResize) {
         clearPendingWindowSizePersistence();
-      } else {
+      } else if (IS_LINUX && !displayTopologyRestoreTimer) {
         scheduleWindowSizePersistence(mainWindow);
+      } else {
+        clearPendingWindowSizePersistence();
       }
     }
   });
