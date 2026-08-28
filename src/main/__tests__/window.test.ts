@@ -609,6 +609,53 @@ describe('createMainWindow', () => {
     }
   });
 
+  it('restores the saved proportion after display topology changes settle', async () => {
+    jest.useFakeTimers();
+    try {
+      loadSettingsMock.mockReturnValue({
+        windowSizeRatio: { width: 0.5260374288039056, height: 0.5155459146782357 },
+        contentScaleRatio: 0.0004068348250610252,
+        lockWindowCenter: true,
+      });
+      const compactDisplay = {
+        id: 3,
+        scaleFactor: 1,
+        bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+        workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+      };
+      getDisplayMatchingMock.mockReturnValue(compactDisplay);
+      getBoundsMock.mockReturnValue({ x: 20, y: 20, width: 1880, height: 1040 });
+      const { createMainWindow } = await import('../window');
+
+      createMainWindow();
+      const removedHandler = screenOnMock.mock.calls.find(
+        ([eventName]) => eventName === 'display-removed',
+      )?.[1] as (() => void) | undefined;
+      const addedHandler = screenOnMock.mock.calls.find(
+        ([eventName]) => eventName === 'display-added',
+      )?.[1] as (() => void) | undefined;
+      expect(removedHandler).toBeDefined();
+      expect(addedHandler).toBe(removedHandler);
+
+      removedHandler!();
+      jest.advanceTimersByTime(500);
+
+      expect(setBoundsMock).toHaveBeenLastCalledWith({
+        x: 455,
+        y: 262,
+        width: 1010,
+        height: 557,
+      });
+      expect(webContentsSetZoomFactorMock).toHaveBeenLastCalledWith(
+        0.0004068348250610252 * 1920,
+      );
+      expect(webContentsSendMock).not.toHaveBeenCalled();
+    } finally {
+      jest.runOnlyPendingTimers();
+      jest.useRealTimers();
+    }
+  });
+
   it('adapts an unlocked window when it moves to a differently scaled display', async () => {
     loadSettingsMock.mockReturnValue({
       windowSizeRatio: { width: 1378 / 3072, height: 771 / 1728 },
@@ -724,11 +771,15 @@ describe('createMainWindow', () => {
     );
   });
 
-  it('releases programmatic resize suppression for later resize-only platform input', async () => {
+  it('never persists resize-only system input on non-Linux platforms', async () => {
     jest.useFakeTimers();
+    jest.doMock('../platform', () => ({ IS_LINUX: false }));
     try {
-      const { IPC_CHANNELS } = await import('../../shared/ipcChannels');
-      const { createMainWindow, resizeMainWindowByHeightDelta } = await import('../window');
+      loadSettingsMock.mockReturnValue({
+        windowSizeRatio: { width: 1378 / 3072, height: 771 / 1728 },
+        lockWindowCenter: true,
+      });
+      const { createMainWindow } = await import('../window');
 
       createMainWindow();
       const resizeHandler = onMock.mock.calls.find(([eventName]) => eventName === 'resize')?.[1] as
@@ -736,20 +787,14 @@ describe('createMainWindow', () => {
         | undefined;
       expect(resizeHandler).toBeDefined();
 
-      resizeMainWindowByHeightDelta(-120);
       webContentsSendMock.mockClear();
-      jest.advanceTimersByTime(2000);
-
-      getSizeMock.mockReturnValue([800, 500]);
+      getSizeMock.mockReturnValue([1880, 1040]);
       resizeHandler!();
       jest.advanceTimersByTime(150);
 
-      expect(webContentsSendMock).toHaveBeenCalledWith(
-        IPC_CHANNELS.WINDOW_SIZE_RATIO_CHANGED,
-        800 / 1920,
-        500 / 1080,
-      );
+      expect(webContentsSendMock).not.toHaveBeenCalled();
     } finally {
+      jest.dontMock('../platform');
       jest.runOnlyPendingTimers();
       jest.useRealTimers();
     }
