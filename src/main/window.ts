@@ -409,6 +409,13 @@ function placeWindowOnCursorDisplay(win: BrowserWindow): void {
   }
 }
 
+function applyZoomFactorIfChanged(win: BrowserWindow, zoomFactor: number): void {
+  if (Math.abs(win.webContents.getZoomFactor() - zoomFactor) < 0.000001) {
+    return;
+  }
+  win.webContents.setZoomFactor(zoomFactor);
+}
+
 function applyPreferredLayoutToDisplay(
   win: BrowserWindow,
   display: Display,
@@ -424,7 +431,8 @@ function applyPreferredLayoutToDisplay(
     getDisplayBounds(display),
     display.workArea,
   );
-  win.webContents.setZoomFactor(
+  applyZoomFactorIfChanged(
+    win,
     getContentZoomFactor(preferredContentScaleRatio, getDisplayBounds(display), displaySize),
   );
   const currentBounds = win.getBounds();
@@ -486,7 +494,8 @@ function restoreConfiguredSizeForShow(win: BrowserWindow): void {
     getDisplayBounds(currentDisplay),
     currentDisplay.workArea,
   );
-  win.webContents.setZoomFactor(
+  applyZoomFactorIfChanged(
+    win,
     getContentZoomFactor(preferredContentScaleRatio, getDisplayBounds(currentDisplay), displaySize),
   );
 
