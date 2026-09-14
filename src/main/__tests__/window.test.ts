@@ -54,7 +54,11 @@ const hideMock = jest.fn();
 const showMock = jest.fn();
 const unmaximizeMock = jest.fn();
 const webContentsSendMock = jest.fn();
-const webContentsSetZoomFactorMock = jest.fn();
+let currentZoomFactor = 1;
+const webContentsGetZoomFactorMock = jest.fn(() => currentZoomFactor);
+const webContentsSetZoomFactorMock = jest.fn((zoomFactor: number) => {
+  currentZoomFactor = zoomFactor;
+});
 
 jest.mock('electron', () => ({
   app: {
@@ -142,7 +146,13 @@ describe('createMainWindow', () => {
     showMock.mockClear();
     unmaximizeMock.mockClear();
     webContentsSendMock.mockClear();
+    currentZoomFactor = 1;
+    webContentsGetZoomFactorMock.mockReset();
+    webContentsGetZoomFactorMock.mockImplementation(() => currentZoomFactor);
     webContentsSetZoomFactorMock.mockClear();
+    webContentsSetZoomFactorMock.mockImplementation((zoomFactor: number) => {
+      currentZoomFactor = zoomFactor;
+    });
     isDestroyedMock.mockReturnValue(false);
     loadSettingsMock.mockReturnValue({
       windowSize: {
@@ -174,6 +184,7 @@ describe('createMainWindow', () => {
         show: showMock,
         unmaximize: unmaximizeMock,
         webContents: {
+          getZoomFactor: webContentsGetZoomFactorMock,
           isDestroyed: jest.fn(() => false),
           send: webContentsSendMock,
           setZoomFactor: webContentsSetZoomFactorMock,
@@ -453,6 +464,26 @@ describe('createMainWindow', () => {
       width: 861,
       height: 482,
     });
+  });
+
+  it('does not invalidate an already matching layout when a locked window is shown', async () => {
+    loadSettingsMock.mockReturnValue({
+      windowSizeRatio: { width: 0.5, height: 0.5 },
+      contentScaleRatio: 0.5 / 1920,
+      lockWindowCenter: true,
+    });
+    getBoundsMock.mockReturnValue({ x: 480, y: 270, width: 960, height: 540 });
+    getSizeMock.mockReturnValue([960, 540]);
+    currentZoomFactor = 0.5;
+    const { createMainWindow, showMainWindow } = await import('../window');
+
+    createMainWindow();
+    showMainWindow();
+
+    expect(webContentsSetZoomFactorMock).not.toHaveBeenCalled();
+    expect(setSizeMock).not.toHaveBeenCalled();
+    expect(setBoundsMock).not.toHaveBeenCalled();
+    expect(showMock).toHaveBeenCalledTimes(1);
   });
 
   it('exits fullscreen and maximized state before comparing restored window dimensions', async () => {
